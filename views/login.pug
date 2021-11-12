@@ -1,0 +1,33 @@
+extends layout
+
+block content
+  .container
+    .row.justify-content-center
+      .col-md-6.mt-5
+        h1= title
+        title
+        p Welcome to #{title} reservation system
+
+        h2 Login
+        form(action="/user/login" method="POST")
+          div.mb-3
+            label.form-label(for="email-log") Email
+            input.form-control#email-log(name="email" type="")
+          div
+            label.form-label Password
+            input.form-control#psw-log(name="password" type="password")
+          div
+            button.btn.btn-primary.mt-3(type="submit") Login
+
+    .row.justify-content-center
+      .col-md-6.mt-5
+        h2 Register
+        form(action="/user/register" method="POST")
+          div.mb-3
+            label.form-label(for="email-reg") Email
+            input.form-control#email-reg(name="email" type="")
+          div
+            label.form-label(for="psw-reg") Password
+            input.form-control#psw-reg(name="password" type="password")
+          div
+            button.btn.btn-primary.mt-3(type="submit") Register

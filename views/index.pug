@@ -1,5 +1,17 @@
 extends layout
 
 block content
-  h1= title
-  p Welcome to #{title}
+  .container.mt-5
+    h1 GLIP
+
+    // Login section
+    .row.justify-content-center.mb-2
+      .col-md-8.col-sm-12.link-banner
+        a.d-flex.w-100.h-100.justify-content-center.align-items-center(href='/login')
+          span.align-bottom LOGIN
+
+    // Calendar section
+    .row.justify-content-center
+      .col-md-8.col-sm-12.link-banner
+        a.d-flex.w-100.h-100.justify-content-center.align-items-center(href='/login')
+          span.align-bottom CALENDAR
