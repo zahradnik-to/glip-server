@@ -1,4 +1,4 @@
-const mongoose = require('mongoose')
+const mongoose = require('mongoose');
 
 const UserSchema = new mongoose.Schema({
   email: {
@@ -32,8 +32,8 @@ const UserSchema = new mongoose.Schema({
   role: {
     type: String,
     default: 'user', // Possible values: user | admin
-  }
-})
+  },
+});
 
-const User = mongoose.model("User", UserSchema)
-module.exports = User
+const User = mongoose.model('User', UserSchema);
+module.exports = User;

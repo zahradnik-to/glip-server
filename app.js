@@ -5,6 +5,7 @@ const path = require('path');
 const cookieParser = require('cookie-parser');
 const logger = require('morgan');
 const mongoose = require('mongoose');
+const cors = require('cors');
 require('dotenv').config();
 
 const indexRouter = require('./routes/index');
@@ -14,9 +15,9 @@ const app = express();
 
 // view engine setup
 app.set('views', path.join(__dirname, 'views'));
-app.set('view engine', 'pug');
 
 app.use(logger('dev'));
+app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
@@ -25,16 +26,13 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use('/', indexRouter);
 app.use('/user', usersRouter);
 
-const mongoDB = process.env.MONGO_DB;
-const appPort = process.env.APP_PORT;
+mongoose.connect(process.env.MONGO_DB, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+}, () => console.log('Database ready!'));
 
-app.listen(appPort, async () => {
-  await mongoose.connect(mongoDB, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-  });
-  console.log('Database ready!');
-  console.log(`Express listening on http://localhost:${appPort}`);
+app.listen(process.env.APP_PORT, () => {
+  console.log(`Express listening on http://localhost:${process.env.APP_PORT}`);
 });
 
 // catch 404 and forward to error handler

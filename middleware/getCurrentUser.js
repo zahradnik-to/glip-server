@@ -6,7 +6,6 @@ const UserModel = require('../models/user');
 const getCurrentUser = async (req, res, next) => {
   let { id } = req.user;
 
-  // In case we
   if (!id) {
     const { token } = req.cookies;
     const tokenPayload = token.split('.')[1];
