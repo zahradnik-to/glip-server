@@ -3,8 +3,17 @@ const mongoose = require('mongoose');
 const EventSchema = mongoose.Schema({
   start: Date,
   end: Date,
-  title: String,
+  customerId: String,
+  customerLastName: String,
+  duration: {
+    type: String,
+    enum: ['15', '60', '90'],
+  },
+  typeOfService: {
+    type: String,
+    enum: ['cosmetics', 'hair', 'massage'],
+  },
 });
 
-const Event = mongoose.model('Event', EventSchema);
-module.exports = Event;
+const EventModel = mongoose.model('Event', EventSchema);
+module.exports = EventModel;

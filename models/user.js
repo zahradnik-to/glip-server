@@ -25,13 +25,14 @@ const UserSchema = new mongoose.Schema({
     type: String,
   },
 
-  surname: {
+  lastname: {
     type: String,
   },
 
   role: {
     type: String,
-    default: 'user', // Possible values: user | admin
+    enum: ['user', 'cosmetics', 'hair', 'massage'],
+    default: 'user',
   },
 });
 

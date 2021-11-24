@@ -22,9 +22,6 @@ class AuthService {
     return {
       user: {
         email: result.email,
-        // Todo add other info for user
-        // name: result.name,
-        // surname: result.surname,
         salt: salt.toString('hex'),
       },
       token: this.generateJWT(user),
@@ -33,30 +30,27 @@ class AuthService {
 
   async login(email, password) {
     const user = await UserModel.findOne({ email });
-    if (!user) throw new Error('User not found');
+    if (!user) {
+      console.log('noUser');
+      throw new Error('User not found');
+    }
 
     const isPasswordCorrect = await argon2.verify(user.password, password);
-    if (!isPasswordCorrect) throw new Error('Password is incorrect');
+    if (!isPasswordCorrect) {
+      console.log('psw incorrecto');
+      throw new Error('Password is incorrect');
+    }
 
     return {
       token: this.generateJWT(user),
     };
   }
 
-  generateJWT({ _id, email }) {
+  generateJWT({ _id }) {
     return jwt.sign({
       _id,
-      email,
     }, this.SECRET, { expiresIn: '8h' });
   }
-
-  static generateHttpCookie = (res, token) => {
-    res.cookie('token', token, {
-      expires: new Date(Date.now() + 8 * (60 * 60 * 1000)),
-      secure: false,
-      httpOnly: true,
-    });
-  };
 }
 
 module.exports = AuthService;
