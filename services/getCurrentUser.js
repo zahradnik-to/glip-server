@@ -1,5 +1,5 @@
 const jwtDecode = require('jwt-decode');
-const UserModel = require('../models/user');
+const UserModel = require('../models/userModel');
 
 /**
  * Find an user from token.

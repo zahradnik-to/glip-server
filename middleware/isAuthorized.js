@@ -2,7 +2,8 @@
  * Checks user role.
  */
 const verifyRole = (requiredRole) => (req, res, next) => {
-  if (req.user.role !== requiredRole) {
+  console.log(req.user);
+  if (req.user.role !== requiredRole && req.user.role !== 'admin') {
     return res.status(401).end();
   }
   return next();

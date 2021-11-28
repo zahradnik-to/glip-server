@@ -1,11 +1,11 @@
 const express = require('express');
-const Users = require('../models/user');
+const UserModel = require('../models/userModel');
 const AuthService = require('../services/authentication');
 
 const router = express.Router();
 
 router.post('/register', async (req, res) => {
-  const user = new Users(req.body);
+  const user = new UserModel(req.body);
 
   try {
     const authService = new AuthService();

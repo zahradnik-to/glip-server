@@ -2,8 +2,8 @@ const router = require('express').Router();
 
 const moment = require('moment');
 const jwt = require('jsonwebtoken');
-const EventModel = require('../models/event');
-const UserModel = require('../models/user');
+const EventModel = require('../models/eventModel');
+const UserModel = require('../models/userModel');
 
 /**
  * Takes values from client form, fills missing parameters, saves to Mongo.
