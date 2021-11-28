@@ -4,7 +4,7 @@ const AuthService = require('../services/authentication');
 
 const router = express.Router();
 
-router.post('/register', async (req, res, next) => {
+router.post('/register', async (req, res) => {
   const user = new Users(req.body);
 
   try {
@@ -16,14 +16,13 @@ router.post('/register', async (req, res, next) => {
   }
 });
 
-router.post('/login', async (req, res, next) => {
+router.post('/login', async (req, res) => {
   const userEmail = req.body.email;
   const userPassword = req.body.password;
 
   try {
     const authService = new AuthService();
     const { token } = await authService.login(userEmail, userPassword);
-    // AuthService.generateHttpCookie(res, token);
 
     return res.json(token).status(200);
   } catch (e) {

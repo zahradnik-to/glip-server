@@ -1,6 +1,8 @@
 const jwt = require('jsonwebtoken');
 const AuthService = require('../services/authentication');
 
+// Todo Refactor/delete all old middleware
+
 /**
  * Checks validity of token.
  */
@@ -10,7 +12,7 @@ const verifyToken = async (req, res, next) => {
 
   const authService = new AuthService();
   try {
-    const decrypt = await jwt.verify(token, authService.SECRET);
+    const decrypt = jwt.verify(token, authService.SECRET);
     req.user = {
       id: decrypt._id,
     };

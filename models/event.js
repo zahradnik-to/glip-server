@@ -1,13 +1,28 @@
 const mongoose = require('mongoose');
 
 const EventSchema = mongoose.Schema({
+  // FullCalendar properties
   start: Date,
   end: Date,
-  customerId: String,
-  customerLastName: String,
-  duration: {
+  title: String,
+  allDay: {
+    type: Boolean,
+    default: false,
+  },
+
+  // Custom properties
+  customerId: {
     type: String,
-    enum: ['15', '60', '90'],
+    default: null,
+  },
+  lastname: {
+    type: String,
+  },
+  email: {
+    type: String,
+  },
+  duration: {
+    type: Number,
   },
   typeOfService: {
     type: String,
