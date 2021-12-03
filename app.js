@@ -8,10 +8,10 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 require('dotenv').config();
 
-const indexRouter = require('./routes/index');
-const usersRouter = require('./routes/users');
-const calendarRouter = require('./routes/calendar');
-const procedureRoute = require('./routes/procedure');
+const indexRouter = require('./controller/index');
+const usersRouter = require('./controller/users');
+const calendarRouter = require('./controller/calendar');
+const procedureRoute = require('./controller/procedure');
 
 const app = express();
 

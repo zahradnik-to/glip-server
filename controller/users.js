@@ -11,8 +11,8 @@ router.post('/register', async (req, res) => {
     const authService = new AuthService();
     const registerResult = await authService.register(user);
     return res.status(200).json(registerResult).end();
-  } catch (e) {
-    return res.json(e).status(500).end();
+  } catch (err) {
+    return res.status(500).json(err.toString()).end();
   }
 });
 
@@ -24,11 +24,10 @@ router.post('/login', async (req, res) => {
     const authService = new AuthService();
     const { token } = await authService.login(userEmail, userPassword);
 
-    return res.json(token).status(200);
-  } catch (e) {
-    console.log('Err caught');
-    console.log(e);
-    return res.json(e).status(500);
+    return res.status(200).json(token);
+  } catch (err) {
+    console.log(err);
+    return res.status(401).json(err.toString());
   }
 });
 

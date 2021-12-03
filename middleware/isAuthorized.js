@@ -4,7 +4,7 @@
 const verifyRole = (requiredRole) => (req, res, next) => {
   console.log(req.user);
   if (req.user.role !== requiredRole && req.user.role !== 'admin') {
-    return res.status(401).end();
+    return res.status(403).json('Insufficient privileges.');
   }
   return next();
 };

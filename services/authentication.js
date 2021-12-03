@@ -37,7 +37,6 @@ class AuthService {
 
     const isPasswordCorrect = await argon2.verify(user.password, password);
     if (!isPasswordCorrect) {
-      console.log('psw incorrecto');
       throw new Error('Password is incorrect');
     }
 
