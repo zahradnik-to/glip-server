@@ -30,38 +30,67 @@ router.post('/create-event', async (req, res) => {
     end: moment(event.start).add(event.duration, 'minutes'),
   };
 
-  const eventModel = EventModel(event);
-  await eventModel.save();
-  res.json(event).status(201);
+  await EventModel(event).save();
+  // await eventModel.save();
+  res.status(201).json(event);
 });
 
 router.get('/get-events', async (req, res) => {
-  const events = await EventModel.find({
-    start: { $gte: moment(req.query.start).toDate() },
-    end: { $lte: moment(req.query.end).toDate() },
-  });
-  res.send(events);
+  // Fixme add TOS to filters
+  try {
+    const events = await EventModel.find({
+      start: { $gte: moment(req.query.start).toDate() },
+      end: { $lte: moment(req.query.end).toDate() },
+    });
+    res.status(200).json(events);
+  } catch (err) {
+    console.log(err);
+  }
 });
 
 router.get('/get-free-time', async (req, res) => {
   // Todo algo for hiding occupied times
-  // const events = await EventModel.find({
-  //   start: { $gte: moment(req.query.start).toDate() },
-  //   end: { $lte: moment(req.query.end).toDate() },
-  // });
+  let start;
+  let end;
+  if (req.query.date) {
+    start = req.query.date;
+    end = moment(req.query.date).add(1, 'day').toDate().toISOString();
+    console.log(end);
+  } else {
+    start = moment(req.query.start).toDate();
+    end = moment(req.query.end).add(1, 'day').toDate();
+  }
+
+  const events = await EventModel.find({
+    start: { $gte: start },
+    end: { $lte: end },
+    typeOfService: req.query.typeOfService,
+  }).lean();
 
   const freeTime = [];
-  const date = new Date();
+  const date = new Date(req.query.start);
 
   for (let minutes = 0; minutes < 8 * 60; minutes += 30) {
-    date.setHours(8);
+    date.setHours(8); // Work time begin
     date.setMinutes(minutes);
+
+    const exists = (e) => Date.parse(e.start) <= date.getTime() && Date.parse(e.end) > date.getTime();
+    // eslint-disable-next-line no-continue
+    if (events.some((exists))) {
+      console.log(date.toISOString());
+      // Fixme
+      // eslint-disable-next-line no-continue
+      continue;
+    }
+
     freeTime.push(date.toLocaleTimeString('cs', {
       hour: '2-digit',
       minute: 'numeric',
     }));
   }
 
-  res.send(freeTime);
+  console.log(freeTime);
+
+  res.json(freeTime);
 });
 module.exports = router;
