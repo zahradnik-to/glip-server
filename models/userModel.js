@@ -6,32 +6,15 @@ const UserSchema = new mongoose.Schema({
     required: true,
     trim: true,
     unique: true,
-    lowercase: true,
   },
 
-  password: {
-    type: String,
-    required: true,
-    trim: true,
-    minlength: 3, // Todo add psw complexity
-  },
-
-  salt: {
-    type: String,
-    required: false,
-  },
-
-  name: {
-    type: String,
-  },
-
-  lastname: {
+  googleId: {
     type: String,
   },
 
   role: {
     type: String,
-    enum: ['user', 'cosmetics', 'hair', 'massage'],
+    enum: ['user', 'cosmetics', 'hair', 'massage', 'admin'],
     default: 'user',
   },
 });

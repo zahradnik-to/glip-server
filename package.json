@@ -11,6 +11,7 @@
     "@fortawesome/fontawesome-free": "^5.15.4",
     "argon2": "^0.28.2",
     "cookie-parser": "~1.4.4",
+    "cookie-session": "^1.4.0",
     "cors": "^2.8.5",
     "debug": "~2.6.9",
     "dotenv": "^10.0.0",
@@ -22,6 +23,8 @@
     "moment": "^2.29.1",
     "mongoose": "^6.0.12",
     "morgan": "~1.10.0",
+    "passport": "^0.5.0",
+    "passport-google-oauth20": "^2.0.0",
     "pug": "^3.0.2",
     "sass": "^1.43.3"
   },

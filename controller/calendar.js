@@ -78,7 +78,7 @@ router.get('/get-free-time', async (req, res) => {
     // eslint-disable-next-line no-continue
     if (events.some((exists))) {
       console.log(date.toISOString());
-      // Fixme
+      // Fixme no continue
       // eslint-disable-next-line no-continue
       continue;
     }

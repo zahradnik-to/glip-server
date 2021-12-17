@@ -31,4 +31,27 @@ router.post('/login', async (req, res) => {
   }
 });
 
+router.get('/get', async (req, res) => {
+  try {
+    const filter = req.query;
+    console.log(filter);
+    const users = await UserModel.findOne(filter).lean();
+    return res.status(200).json(users);
+  } catch (err) {
+    console.log('Get users error: ', err);
+    return res.status(401).json(err.toString());
+  }
+});
+
+router.get('/get-many', async (req, res) => {
+  try {
+    const filter = req.query;
+    const users = await UserModel.find(filter).lean();
+    return res.status(200).json(users);
+  } catch (err) {
+    console.log('Get many users error: ', err);
+    return res.status(401).json(err.toString());
+  }
+});
+
 module.exports = router;

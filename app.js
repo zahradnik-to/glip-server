@@ -7,11 +7,15 @@ const logger = require('morgan');
 const mongoose = require('mongoose');
 const cors = require('cors');
 require('dotenv').config();
+require('./controller/passport');
 
+const passport = require('passport');
+const cookieSession = require('cookie-session');
 const indexRouter = require('./controller/index');
 const usersRouter = require('./controller/users');
 const calendarRouter = require('./controller/calendar');
 const procedureRoute = require('./controller/procedure');
+const authRoute = require('./controller/auth');
 
 const app = express();
 
@@ -25,10 +29,20 @@ app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
 
+app.use(cookieSession({
+  name: 'session',
+  keys: ['glip'],
+  maxAge: 24 * 60 * 60 * 100, // 1 day
+}));
+
+app.use(passport.initialize());
+app.use(passport.session());
+
 app.use('/', indexRouter);
 app.use('/user', usersRouter);
 app.use('/calendar', calendarRouter);
 app.use('/procedure', procedureRoute);
+app.use('/auth', authRoute);
 
 mongoose.connect(process.env.MONGO_DB, {
   useNewUrlParser: true,
