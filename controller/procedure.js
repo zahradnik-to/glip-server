@@ -13,7 +13,7 @@ router.post('/create', verifyToken, verifyRole('admin'), async (req, res) => {
 
 router.get('/get', async (req, res) => {
   try {
-    const { typeOfService } = req.query;
+    const typeOfService = req.query.tos;
     const procedures = await ProcedureModel.find({ typeOfService }).lean();
     res.status(200).json(procedures);
   } catch (err) {

@@ -18,6 +18,8 @@
         "linebreak-style": "off",
         "no-unused-vars": "warn",
         "no-console": "off",
-        "max-len": "off"
+        "max-len": "off",
+        "no-use-before-define": ["error", { "functions": false }],
+        "no-continue": "off"
     }
 }

@@ -1,35 +1,22 @@
 const router = require('express').Router();
 
-const moment = require('moment');
-const jwt = require('jsonwebtoken');
+const { addMinutes, addDays } = require('date-fns');
 const EventModel = require('../models/eventModel');
-const UserModel = require('../models/userModel');
+
+const WORK_TIME_BEGIN = 8;
+const WORK_TIME_DURATION_HOURS = 8;
+const APPOINTMENT_GRANULARITY_MINUTES = 30;
 
 /**
  * Takes values from client form, fills missing parameters, saves to Mongo.
- * @return object On resolve returns an object of saved document
+ * @return Object On resolve returns an object of saved document
  */
 router.post('/create-event', async (req, res) => {
-  let event = req.body;
-  if (req.headers.authorization) {
-    const decrypt = jwt.verify(req.headers.authorization, process.env.SECRET);
-    const user = await UserModel.findOne({ _id: decrypt._id }).exec()
-      .then((result) => result.toObject())
-      .catch((err) => console.error('calendar/create-event get user error', err));
-    if (event.allDay && user.role !== 'admin') event.allDay = false;
+  const event = req.body;
+  event.title = `${event.lastname} ${event.duration}min`;
+  event.end = new Date(addMinutes(new Date(event.start), event.duration)).toISOString();
 
-    event = {
-      ...event,
-      customerId: user._id,
-    };
-  }
-
-  event = {
-    ...event,
-    title: `${event.lastname} ${event.duration}min`,
-    end: moment(event.start).add(event.duration, 'minutes'),
-  };
-
+  console.log('Save this event: ', event);
   await EventModel(event).save();
   // await eventModel.save();
   res.status(201).json(event);
@@ -39,58 +26,59 @@ router.get('/get-events', async (req, res) => {
   // Fixme add TOS to filters
   try {
     const events = await EventModel.find({
-      start: { $gte: moment(req.query.start).toDate() },
-      end: { $lte: moment(req.query.end).toDate() },
-    });
+      start: { $gte: new Date(req.query.start).toISOString() },
+      end: { $lte: new Date(req.query.end).toISOString() },
+      typeOfService: req.query.tos,
+    }).lean();
+    console.log('Events: ', events);
     res.status(200).json(events);
   } catch (err) {
     console.log(err);
   }
 });
 
+/**
+ * @date UTC ISO String of a date for which to search free time.
+ * @returns Array of free times as strings.
+ */
 router.get('/get-free-time', async (req, res) => {
-  // Todo algo for hiding occupied times
-  let start;
-  let end;
-  if (req.query.date) {
-    start = req.query.date;
-    end = moment(req.query.date).add(1, 'day').toDate().toISOString();
-    console.log(end);
-  } else {
-    start = moment(req.query.start).toDate();
-    end = moment(req.query.end).add(1, 'day').toDate();
-  }
+  const { start, end } = getStartEnd(req.query.date);
+  const typeOfService = req.query.tos;
 
   const events = await EventModel.find({
     start: { $gte: start },
     end: { $lte: end },
-    typeOfService: req.query.typeOfService,
+    typeOfService,
   }).lean();
 
-  const freeTime = [];
-  const date = new Date(req.query.start);
+  const date = new Date(req.query.date);
+  const freeTime = calculateFreeTime(date, events);
 
-  for (let minutes = 0; minutes < 8 * 60; minutes += 30) {
-    date.setHours(8); // Work time begin
+  res.json(freeTime);
+});
+
+function getStartEnd(date) {
+  return {
+    start: new Date(date).toISOString(),
+    end: addDays(new Date(date), 1).toISOString(),
+  };
+}
+
+function calculateFreeTime(date, events) {
+  const freeTime = [];
+  for (let minutes = 0; minutes < WORK_TIME_DURATION_HOURS * 60; minutes += APPOINTMENT_GRANULARITY_MINUTES) {
+    date.setHours(WORK_TIME_BEGIN);
     date.setMinutes(minutes);
 
-    const exists = (e) => Date.parse(e.start) <= date.getTime() && Date.parse(e.end) > date.getTime();
-    // eslint-disable-next-line no-continue
-    if (events.some((exists))) {
-      console.log(date.toISOString());
-      // Fixme no continue
-      // eslint-disable-next-line no-continue
-      continue;
-    }
+    const eventExists = (e) => Date.parse(e.start) <= date.getTime() && Date.parse(e.end) > date.getTime();
+    if (events.some((eventExists))) continue;
 
     freeTime.push(date.toLocaleTimeString('cs', {
       hour: '2-digit',
       minute: 'numeric',
     }));
   }
+  return freeTime;
+}
 
-  console.log(freeTime);
-
-  res.json(freeTime);
-});
 module.exports = router;

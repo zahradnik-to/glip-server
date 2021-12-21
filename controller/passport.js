@@ -41,10 +41,8 @@ passport.serializeUser((user, done) => {
  */
 passport.deserializeUser((apiUser, done) => {
   // Saves user to req.user
-  console.log('API USER ', apiUser);
   User.findOne({ googleId: apiUser.id }).lean()
     .then((dbUser) => {
-      console.log('DB USER: ', dbUser);
       const user = {
         ...dbUser,
         name: apiUser.name,
