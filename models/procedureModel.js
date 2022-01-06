@@ -7,6 +7,7 @@ const ProcedureSchema = mongoose.Schema({
   },
   duration: {
     type: Number,
+    required: true,
   },
   typeOfService: {
     type: String,

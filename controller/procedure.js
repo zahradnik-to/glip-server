@@ -7,9 +7,13 @@ const verifyRole = require('../middleware/isAuthorized');
 
 router.post('/create', async (req, res) => {
   const procedure = req.body;
-  const procedureModel = ProcedureModel(procedure);
-  await procedureModel.save();
-  res.status(201).json(procedure);
+  try {
+    const procedureModel = ProcedureModel(procedure);
+    await procedureModel.save();
+    res.status(201).json(procedure);
+  } catch (err) {
+    res.status(501).json(err);
+  }
 });
 
 router.get('/get', async (req, res) => {
