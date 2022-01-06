@@ -23,7 +23,6 @@ router.post('/create-event', async (req, res) => {
 });
 
 router.get('/get-events', async (req, res) => {
-  // Fixme add TOS to filters
   try {
     const events = await EventModel.find({
       start: { $gte: new Date(req.query.start).toISOString() },

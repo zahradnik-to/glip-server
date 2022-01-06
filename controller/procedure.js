@@ -1,10 +1,11 @@
 const router = require('express').Router();
 
 const ProcedureModel = require('../models/procedureModel');
+// Todo sort auth
 const verifyToken = require('../middleware/isAuthenticated');
 const verifyRole = require('../middleware/isAuthorized');
 
-router.post('/create', verifyToken, verifyRole('admin'), async (req, res) => {
+router.post('/create', async (req, res) => {
   const procedure = req.body;
   const procedureModel = ProcedureModel(procedure);
   await procedureModel.save();
@@ -12,9 +13,15 @@ router.post('/create', verifyToken, verifyRole('admin'), async (req, res) => {
 });
 
 router.get('/get', async (req, res) => {
+  let procedures;
+  const typeOfService = req.query.tos;
+  const isAdmin = true; // Todo admin authentication
   try {
-    const typeOfService = req.query.tos;
-    const procedures = await ProcedureModel.find({ typeOfService }).lean();
+    if (!typeOfService && isAdmin) {
+      procedures = await ProcedureModel.find().lean();
+    } else {
+      procedures = await ProcedureModel.find({ typeOfService }).lean();
+    }
     res.status(200).json(procedures);
   } catch (err) {
     console.warn('procedure/get error');
@@ -23,7 +30,7 @@ router.get('/get', async (req, res) => {
   }
 });
 
-router.delete('/delete', verifyToken, verifyRole('admin'), async (req, res) => {
+router.delete('/delete', async (req, res) => {
   const { id } = req.body;
   try {
     const procedure = await ProcedureModel.find({ _id: id }).lean();
@@ -38,17 +45,17 @@ router.delete('/delete', verifyToken, verifyRole('admin'), async (req, res) => {
   }
 });
 
-router.put('/update', verifyToken, verifyRole('admin'), async (req, res) => {
+router.put('/update', async (req, res) => {
+  const {
+    _id, name, duration, typeOfService,
+  } = req.body;
   try {
-    const {
-      id, name, duration, typeOfService,
-    } = req.body;
     const update = {
       name,
       duration,
       typeOfService,
     };
-    const result = await ProcedureModel.findOneAndUpdate({ _id: id }, update, { new: true }).lean();
+    const result = await ProcedureModel.findOneAndUpdate({ _id }, update, { new: true }).lean();
     res.status(200).json(result);
   } catch (err) {
     console.warn('procedure/delete error');
