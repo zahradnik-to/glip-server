@@ -12,7 +12,7 @@ require('./controller/passport');
 const passport = require('passport');
 const cookieSession = require('cookie-session');
 const indexRouter = require('./controller/index');
-const usersRouter = require('./controller/users');
+const usersRouter = require('./controller/user');
 const calendarRouter = require('./controller/calendar');
 const procedureRoute = require('./controller/procedure');
 const authRoute = require('./controller/auth');

@@ -4,33 +4,6 @@ const AuthService = require('../services/authentication');
 
 const router = express.Router();
 
-router.post('/register', async (req, res) => {
-  const user = new UserModel(req.body);
-
-  try {
-    const authService = new AuthService();
-    const registerResult = await authService.register(user);
-    return res.status(200).json(registerResult).end();
-  } catch (err) {
-    return res.status(500).json(err.toString()).end();
-  }
-});
-
-router.post('/login', async (req, res) => {
-  const userEmail = req.body.email;
-  const userPassword = req.body.password;
-
-  try {
-    const authService = new AuthService();
-    const { token } = await authService.login(userEmail, userPassword);
-
-    return res.status(200).json(token);
-  } catch (err) {
-    console.log(err);
-    return res.status(401).json(err.toString());
-  }
-});
-
 router.get('/get', async (req, res) => {
   try {
     const filter = req.query;
@@ -51,6 +24,22 @@ router.get('/get-many', async (req, res) => {
   } catch (err) {
     console.log('Get many users error: ', err);
     return res.status(401).json(err.toString());
+  }
+});
+
+router.delete('/delete', async (req, res) => {
+  const { id } = req.body;
+  try {
+    const user = await UserModel.find({ _id: id }).lean();
+    console.log('user', user);
+    if (!user.length) throw new Error('User set for deletion not found!');
+
+    const result = await UserModel.deleteOne({ _id: id });
+    res.status(200).json(result);
+  } catch (err) {
+    console.warn('user/delete error');
+    console.log(err);
+    res.status(500).send(err.toString());
   }
 });
 
