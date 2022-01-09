@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 const createError = require('http-errors');
 const express = require('express');
 const path = require('path');
@@ -16,6 +15,7 @@ const usersRouter = require('./controller/user');
 const calendarRouter = require('./controller/calendar');
 const procedureRoute = require('./controller/procedure');
 const authRoute = require('./controller/auth');
+const roleRoute = require('./controller/role');
 
 const app = express();
 
@@ -43,6 +43,7 @@ app.use('/user', usersRouter);
 app.use('/calendar', calendarRouter);
 app.use('/procedure', procedureRoute);
 app.use('/auth', authRoute);
+app.use('/role', roleRoute);
 
 mongoose.connect(process.env.MONGO_DB, {
   useNewUrlParser: true,

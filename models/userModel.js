@@ -1,5 +1,7 @@
 const mongoose = require('mongoose');
 
+const userRoles = ['user', 'cosmetics', 'hair', 'massage', 'admin'];
+
 const UserSchema = new mongoose.Schema({
   email: {
     type: String,
@@ -14,8 +16,13 @@ const UserSchema = new mongoose.Schema({
 
   role: {
     type: String,
-    enum: ['user', 'cosmetics', 'hair', 'massage', 'admin'],
+    enum: userRoles,
     default: 'user',
+  },
+
+  pretendRole: {
+    enum: userRoles,
+    type: Boolean,
   },
 });
 
