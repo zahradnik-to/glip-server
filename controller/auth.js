@@ -10,6 +10,12 @@ router.get('/login/success', (req, res) => {
       message: 'Successful',
       user: req.user,
     });
+  } else {
+    res.status(200).json({
+      success: false,
+      message: 'Anonymous user',
+      user: null,
+    });
   }
 });
 
@@ -20,7 +26,7 @@ router.get('/login/failed', (req, res) => {
   });
 });
 
-router.post('/logout', (req, res) => {
+router.get('/logout', (req, res) => {
   req.logout();
   res.redirect(CLIENT_URL);
 });
