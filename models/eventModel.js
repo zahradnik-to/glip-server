@@ -9,6 +9,7 @@ const EventSchema = mongoose.Schema({
     type: Boolean,
     default: false,
   },
+  display: String, // background
 
   // Custom properties
   customerId: {
@@ -27,6 +28,7 @@ const EventSchema = mongoose.Schema({
   typeOfService: {
     type: String,
     enum: ['cosmetics', 'hair', 'massage'],
+    required: true,
   },
 });
 

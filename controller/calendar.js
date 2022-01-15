@@ -2,6 +2,7 @@ const router = require('express').Router();
 
 const { addMinutes, addDays } = require('date-fns');
 const EventModel = require('../models/eventModel');
+const StaffEventModel = require('../models/staffEventModel');
 
 const WORK_TIME_BEGIN = 8;
 const WORK_TIME_DURATION_HOURS = 8;
@@ -16,10 +17,24 @@ router.post('/create-event', async (req, res) => {
   event.title = `${event.lastname} ${event.duration}min`;
   event.end = new Date(addMinutes(new Date(event.start), event.duration)).toISOString();
 
-  console.log('Save this event: ', event);
-  await EventModel(event).save();
-  // await eventModel.save();
+  try {
+    await EventModel(event).save();
+    res.status(201).json(event);
+  } catch (err) {
+    res.status(500).send(err.toString());
+  }
   res.status(201).json(event);
+});
+
+router.post('/create-vacation', async (req, res) => {
+  const event = req.body;
+  try {
+    await StaffEventModel(event).save();
+    res.status(201).json(event);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send(err.toString());
+  }
 });
 
 router.get('/get-events', async (req, res) => {
@@ -29,8 +44,14 @@ router.get('/get-events', async (req, res) => {
       end: { $lte: new Date(req.query.end).toISOString() },
       typeOfService: req.query.tos,
     }).lean();
-    console.log('Events: ', events);
-    res.status(200).json(events);
+    const staffEvents = await StaffEventModel.find({
+      start: { $gte: new Date(req.query.start).toISOString() },
+      end: { $lte: new Date(req.query.end).toISOString() },
+      typeOfService: req.query.tos,
+    }).lean();
+    console.log(staffEvents);
+    console.log([...events, ...staffEvents]);
+    res.status(200).json([...events, ...staffEvents]);
   } catch (err) {
     console.log(err);
   }
