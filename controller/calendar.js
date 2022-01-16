@@ -16,14 +16,29 @@ router.post('/create-event', async (req, res) => {
   const event = req.body;
   event.title = `${event.lastname} ${event.duration}min`;
   event.end = new Date(addMinutes(new Date(event.start), event.duration)).toISOString();
+  const { dateStart, dateEnd } = getDateStartEnd(req.body.date);
 
   try {
     await EventModel(event).save();
+    // If there is no more free time, create all day BC event.
+    const events = await getAllEvents(dateStart, dateEnd, req.body.typeOfService);
+    const freeTime = calculateFreeTime(new Date(dateStart), events, true);
+    if (!freeTime.length) {
+      console.log('Creating BC EVENT.');
+      await StaffEventModel({
+        title: 'Obsazeno',
+        start: dateStart,
+        end: dateEnd,
+        allDay: true,
+        display: 'background',
+        typeOfService: req.body.typeOfService,
+      }).save();
+    }
     res.status(201).json(event);
   } catch (err) {
+    console.error(err);
     res.status(500).send(err.toString());
   }
-  res.status(201).json(event);
 });
 
 router.post('/create-vacation', async (req, res) => {
@@ -38,22 +53,16 @@ router.post('/create-vacation', async (req, res) => {
 });
 
 router.get('/get-events', async (req, res) => {
+  let allEvents;
   try {
-    const events = await EventModel.find({
-      start: { $gte: new Date(req.query.start).toISOString() },
-      end: { $lte: new Date(req.query.end).toISOString() },
-      typeOfService: req.query.tos,
-    }).lean();
-    const staffEvents = await StaffEventModel.find({
-      start: { $gte: new Date(req.query.start).toISOString() },
-      end: { $lte: new Date(req.query.end).toISOString() },
-      typeOfService: req.query.tos,
-    }).lean();
-    console.log(staffEvents);
-    console.log([...events, ...staffEvents]);
-    res.status(200).json([...events, ...staffEvents]);
+    allEvents = await getAllEvents(
+      new Date(req.query.start).toISOString(),
+      new Date(req.query.end).toISOString(),
+      req.query.tos,
+    );
+    res.status(200).json(allEvents);
   } catch (err) {
-    console.log(err);
+    console.error(err);
   }
 });
 
@@ -62,9 +71,29 @@ router.get('/get-events', async (req, res) => {
  * @returns Array of free times as strings.
  */
 router.get('/get-free-time', async (req, res) => {
-  const { start, end } = getStartEnd(req.query.date);
+  const { dateStart, dateEnd } = getDateStartEnd(req.query.date);
   const typeOfService = req.query.tos;
 
+  let allEvents;
+  try {
+    allEvents = await getAllEvents(dateStart, dateEnd, typeOfService);
+  } catch (err) {
+    console.error(err);
+  }
+
+  const date = new Date(req.query.date);
+  const freeTime = calculateFreeTime(date, allEvents);
+  res.json(freeTime);
+});
+
+function getDateStartEnd(date) {
+  return {
+    dateStart: new Date(date).toISOString(),
+    dateEnd: addDays(new Date(date), 1).toISOString(),
+  };
+}
+
+async function getAllEvents(start, end, typeOfService) {
   const events = await EventModel.find({
     start: { $gte: start },
     end: { $lte: end },
@@ -76,20 +105,17 @@ router.get('/get-free-time', async (req, res) => {
     typeOfService,
   }).lean();
 
-  const date = new Date(req.query.date);
-  const freeTime = calculateFreeTime(date, [...events, ...staffEvents]);
-
-  res.json(freeTime);
-});
-
-function getStartEnd(date) {
-  return {
-    start: new Date(date).toISOString(),
-    end: addDays(new Date(date), 1).toISOString(),
-  };
+  return [...events, ...staffEvents];
 }
 
-function calculateFreeTime(date, events) {
+/**
+ * Returns free time for an appointment based on events in DB.
+ * @param date
+ * @param events Array of events to look through.
+ * @param fullyBookedCheck If true, function will return first found free time indicating that selected date is not fully booked.
+ * @returns {*[]} Array of strings representing free times for an appointment.
+ */
+function calculateFreeTime(date, events, fullyBookedCheck = false) {
   const freeTime = [];
   for (let minutes = 0; minutes < WORK_TIME_DURATION_HOURS * 60; minutes += APPOINTMENT_GRANULARITY_MINUTES) {
     date.setHours(WORK_TIME_BEGIN);
@@ -102,8 +128,8 @@ function calculateFreeTime(date, events) {
       hour: '2-digit',
       minute: 'numeric',
     }));
+    if (fullyBookedCheck) return freeTime;
   }
-  console.log(freeTime);
   return freeTime;
 }
 
