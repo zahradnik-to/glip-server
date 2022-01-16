@@ -14,7 +14,7 @@ const APPOINTMENT_GRANULARITY_MINUTES = 30;
  */
 router.post('/create-event', async (req, res) => {
   const event = req.body;
-  event.title = `${event.lastname} ${event.duration}min`;
+  event.title = `${event.lastname}`;
   event.end = new Date(addMinutes(new Date(event.start), event.duration)).toISOString();
   const { dateStart, dateEnd } = getDateStartEnd(req.body.date);
 
@@ -60,9 +60,27 @@ router.get('/get-events', async (req, res) => {
       new Date(req.query.end).toISOString(),
       req.query.tos,
     );
+    console.log(allEvents);
     res.status(200).json(allEvents);
   } catch (err) {
     console.error(err);
+  }
+});
+
+router.get('/get-event', async (req, res) => {
+  const { _id } = req.query;
+  try {
+    EventModel.findById(_id, (err, docs) => {
+      if (err) {
+        console.log(err);
+        res.status(500).json(err);
+      } else {
+        res.status(200).json(docs);
+      }
+    }).lean();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json(err);
   }
 });
 

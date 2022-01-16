@@ -11,7 +11,7 @@ const EventSchema = mongoose.Schema({
   },
   display: String, // background
 
-  // Custom properties
+  // extendedProps
   customerId: {
     type: String,
     default: null,
