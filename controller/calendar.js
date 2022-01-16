@@ -70,9 +70,14 @@ router.get('/get-free-time', async (req, res) => {
     end: { $lte: end },
     typeOfService,
   }).lean();
+  const staffEvents = await StaffEventModel.find({
+    start: { $gte: start },
+    end: { $lte: end },
+    typeOfService,
+  }).lean();
 
   const date = new Date(req.query.date);
-  const freeTime = calculateFreeTime(date, events);
+  const freeTime = calculateFreeTime(date, [...events, ...staffEvents]);
 
   res.json(freeTime);
 });
@@ -98,6 +103,7 @@ function calculateFreeTime(date, events) {
       minute: 'numeric',
     }));
   }
+  console.log(freeTime);
   return freeTime;
 }
 
