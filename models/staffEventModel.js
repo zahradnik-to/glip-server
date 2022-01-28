@@ -16,6 +16,7 @@ const EventSchema = mongoose.Schema({
     type: String,
     enum: ['cosmetics', 'hair', 'massage'],
   },
+  staffNotes: String,
 });
 
 const EventModel = mongoose.model('StaffEvent', EventSchema);

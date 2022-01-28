@@ -1,9 +1,11 @@
 const router = require('express').Router();
 
-const { addMinutes, addDays } = require('date-fns');
+const { addMinutes, addDays, isPast } = require('date-fns');
 const EventModel = require('../models/eventModel');
 const StaffEventModel = require('../models/staffEventModel');
+const ProcedureModel = require('../models/procedureModel');
 
+// Todo make this customizable?
 const WORK_TIME_BEGIN = 8;
 const WORK_TIME_DURATION_HOURS = 8;
 const APPOINTMENT_GRANULARITY_MINUTES = 30;
@@ -21,6 +23,7 @@ router.post('/create-event', async (req, res) => {
   try {
     await EventModel(event).save();
     // If there is no more free time, create all day BC event.
+    // Todo make the opposite for event deletion and update
     const events = await getAllEvents(dateStart, dateEnd, req.body.typeOfService);
     const freeTime = calculateFreeTime(new Date(dateStart), events, true);
     if (!freeTime.length) {
@@ -36,6 +39,23 @@ router.post('/create-event', async (req, res) => {
     }
     res.status(201).json(event);
   } catch (err) {
+    console.error(err);
+    res.status(500).send(err.toString());
+  }
+});
+
+router.put('/update', async (req, res) => {
+  const { _id } = req.body;
+  const update = {
+    start: req.body.start,
+    duration: req.body.duration,
+    typeOfService: req.body.typeOfService,
+  };
+  try {
+    const result = await EventModel.findOneAndUpdate({ _id }, update, { new: true }).lean();
+    res.status(200).json(result);
+  } catch (err) {
+    console.warn('event/update error');
     console.error(err);
     res.status(500).send(err.toString());
   }
@@ -60,7 +80,6 @@ router.get('/get-events', async (req, res) => {
       new Date(req.query.end).toISOString(),
       req.query.tos,
     );
-    console.log(allEvents);
     res.status(200).json(allEvents);
   } catch (err) {
     console.error(err);
@@ -69,19 +88,27 @@ router.get('/get-events', async (req, res) => {
 
 router.get('/get-event', async (req, res) => {
   const { _id } = req.query;
-  try {
-    EventModel.findById(_id, (err, docs) => {
-      if (err) {
-        console.log(err);
-        res.status(500).json(err);
-      } else {
-        res.status(200).json(docs);
-      }
-    }).lean();
-  } catch (err) {
-    console.error(err);
-    res.status(500).json(err);
-  }
+  EventModel.findById(_id, (err, docs) => {
+    if (err) {
+      console.log(err);
+      res.status(500).json(err);
+    } else {
+      console.log(docs);
+      res.status(200).json(docs);
+    }
+  }).lean();
+});
+
+router.get('/get-staff-event', async (req, res) => {
+  const { _id } = req.query;
+  StaffEventModel.findById(_id, (err, docs) => {
+    if (err) {
+      console.log(err);
+      res.status(500).json(err);
+    } else {
+      res.status(200).json(docs);
+    }
+  }).lean();
 });
 
 /**
@@ -105,8 +132,10 @@ router.get('/get-free-time', async (req, res) => {
 });
 
 function getDateStartEnd(date) {
+  const dateStart = new Date(date);
+  dateStart.setHours(0, 0, 0, 0); // 2 lines to keep dateStart as Date obj
   return {
-    dateStart: new Date(date).toISOString(),
+    dateStart: new Date(dateStart).toISOString(),
     dateEnd: addDays(new Date(date), 1).toISOString(),
   };
 }
@@ -138,9 +167,14 @@ function calculateFreeTime(date, events, fullyBookedCheck = false) {
   for (let minutes = 0; minutes < WORK_TIME_DURATION_HOURS * 60; minutes += APPOINTMENT_GRANULARITY_MINUTES) {
     date.setHours(WORK_TIME_BEGIN);
     date.setMinutes(minutes);
+    if (isPast(date)) continue;
 
     const eventExists = (e) => Date.parse(e.start) <= date.getTime() && Date.parse(e.end) > date.getTime();
-    if (events.some((eventExists))) continue;
+    const foundEvent = events.find((eventExists));
+    if (foundEvent) {
+      minutes += (foundEvent.duration - APPOINTMENT_GRANULARITY_MINUTES);
+      continue;
+    }
 
     freeTime.push(date.toLocaleTimeString('cs', {
       hour: '2-digit',
