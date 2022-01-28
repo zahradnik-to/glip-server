@@ -12,23 +12,24 @@ const EventSchema = mongoose.Schema({
   display: String, // background
 
   // extendedProps
+  lastname: String,
+  email: String,
+  duration: Number,
+  procedure: String,
+  notes: String,
+  staffNotes: String,
   customerId: {
     type: String,
     default: null,
-  },
-  lastname: {
-    type: String,
-  },
-  email: {
-    type: String,
-  },
-  duration: {
-    type: Number,
   },
   typeOfService: {
     type: String,
     enum: ['cosmetics', 'hair', 'massage'],
     required: true,
+  },
+  cancelled: {
+    type: Boolean,
+    default: false,
   },
 });
 

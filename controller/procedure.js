@@ -62,7 +62,7 @@ router.put('/update', async (req, res) => {
     const result = await ProcedureModel.findOneAndUpdate({ _id }, update, { new: true }).lean();
     res.status(200).json(result);
   } catch (err) {
-    console.warn('procedure/delete error');
+    console.warn('procedure/update error');
     console.log(err);
     res.status(500).send(err.toString());
   }

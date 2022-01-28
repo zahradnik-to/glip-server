@@ -59,7 +59,7 @@ router.put('/update', async (req, res) => {
     await user.save();
     res.status(200);
   } catch (err) {
-    console.warn('procedure/delete error');
+    console.warn('user/update error');
     console.log(err);
     res.status(500).send(err.toString());
   }

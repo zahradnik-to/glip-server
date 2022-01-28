@@ -8,7 +8,7 @@ const getCurrentUser = async (req, res, next) => {
 
   const user = await UserModel.findOne({ _id: id });
   if (!user) { throw new Error('Logged in user does not exist!'); }
-  req.user = user; // Fixme - only return relevant attributes
+  req.user = user;
 
   return next();
 };
