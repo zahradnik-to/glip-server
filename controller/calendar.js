@@ -3,7 +3,6 @@ const router = require('express').Router();
 const { addMinutes, addDays, isPast } = require('date-fns');
 const EventModel = require('../models/eventModel');
 const StaffEventModel = require('../models/staffEventModel');
-const ProcedureModel = require('../models/procedureModel');
 
 // Todo make this customizable?
 const WORK_TIME_BEGIN = 8;
@@ -17,8 +16,10 @@ const APPOINTMENT_GRANULARITY_MINUTES = 30;
 router.post('/create-event', async (req, res) => {
   const event = req.body;
   event.title = `${event.lastname}`;
-  event.end = new Date(addMinutes(new Date(event.start), event.duration)).toISOString();
+  event.end = calculateEventEnd(event.start, event.duration).toISOString();
   const { dateStart, dateEnd } = getDateStartEnd(req.body.date);
+  console.log(req.user);
+  if (req.user) event.customerId = req.user._id;
 
   try {
     await EventModel(event).save();
@@ -27,7 +28,6 @@ router.post('/create-event', async (req, res) => {
     const events = await getAllEvents(dateStart, dateEnd, req.body.typeOfService);
     const freeTime = calculateFreeTime(new Date(dateStart), events, true);
     if (!freeTime.length) {
-      console.log('Creating BC EVENT.');
       await StaffEventModel({
         title: 'Obsazeno',
         start: dateStart,
@@ -44,18 +44,38 @@ router.post('/create-event', async (req, res) => {
   }
 });
 
-router.put('/update', async (req, res) => {
-  const { _id } = req.body;
-  const update = {
-    start: req.body.start,
-    duration: req.body.duration,
-    typeOfService: req.body.typeOfService,
-  };
+router.put('/update-event', async (req, res) => {
+  const update = req.body;
+  const {
+    _id, start, dateChange,
+  } = update;
   try {
-    const result = await EventModel.findOneAndUpdate({ _id }, update, { new: true }).lean();
-    res.status(200).json(result);
+    const foundEvent = await EventModel.findById(_id).lean();
+
+    let duration;
+    if (update.duration) duration = update.duration;
+    else duration = foundEvent.duration;
+
+    if (dateChange) update.end = calculateEventEnd(start, duration).toISOString();
+
+    const result = await EventModel.updateOne({ _id }, update, { new: true });
+    res.status(200).json(result.modifiedCount);
   } catch (err) {
     console.warn('event/update error');
+    console.error(err);
+    res.status(500).send(err.toString());
+  }
+});
+
+router.put('/update-staff-event', async (req, res) => {
+  const { _id } = req.body;
+  try {
+    const staffEvent = await StaffEventModel.findById(_id);
+    console.log(staffEvent);
+    const result = await StaffEventModel.findOneAndUpdate({ _id }, req.body, { new: true });
+    res.status(200).json(result);
+  } catch (err) {
+    console.warn('staff-event/update error');
     console.error(err);
     res.status(500).send(err.toString());
   }
@@ -90,10 +110,9 @@ router.get('/get-event', async (req, res) => {
   const { _id } = req.query;
   EventModel.findById(_id, (err, docs) => {
     if (err) {
-      console.log(err);
+      console.error(err);
       res.status(500).json(err);
     } else {
-      console.log(docs);
       res.status(200).json(docs);
     }
   }).lean();
@@ -153,6 +172,10 @@ async function getAllEvents(start, end, typeOfService) {
   }).lean();
 
   return [...events, ...staffEvents];
+}
+
+function calculateEventEnd(start, duration) {
+  return new Date(addMinutes(new Date(start), duration));
 }
 
 /**
