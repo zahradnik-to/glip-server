@@ -59,6 +59,7 @@ router.put('/update-event', async (req, res) => {
     if (dateChange) update.end = calculateEventEnd(start, duration).toISOString();
 
     const result = await EventModel.updateOne({ _id }, update, { new: true });
+    // Todo add occupied check
     res.status(200).json(result.modifiedCount);
   } catch (err) {
     console.warn('event/update error');
@@ -99,6 +100,7 @@ router.get('/get-events', async (req, res) => {
       new Date(req.query.start).toISOString(),
       new Date(req.query.end).toISOString(),
       req.query.tos,
+      req.query.showCanceled,
     );
     res.status(200).json(allEvents);
   } catch (err) {
@@ -130,6 +132,50 @@ router.get('/get-staff-event', async (req, res) => {
   }).lean();
 });
 
+router.delete('/delete-staff-event', async (req, res) => {
+  const { _id } = req.body;
+  try {
+    const procedure = await StaffEventModel.find({ _id }).lean();
+    if (!procedure.length) throw new Error('Staff event set for deletion not found!');
+
+    const result = await StaffEventModel.deleteOne({ _id });
+    res.status(200).json(result);
+  } catch (err) {
+    console.warn('staff-event/delete error');
+    console.log(err);
+    res.status(500).send(err.toString());
+  }
+});
+
+router.delete('/delete-event', async (req, res) => {
+  const { _id } = req.body;
+  try {
+    const procedure = await EventModel.find({ _id }).lean();
+    if (!procedure.length) throw new Error('Event set for deletion not found!');
+
+    const result = await EventModel.deleteOne({ _id });
+    res.status(200).json(result);
+  } catch (err) {
+    console.warn('event/delete error');
+    console.log(err);
+    res.status(500).send(err.toString());
+  }
+});
+
+router.put('/cancel-event', async (req, res) => {
+  const { _id, canceled } = req.body;
+  try {
+    const result = await EventModel.updateOne({ _id }, { canceled }, { new: true });
+
+    // Todo add occupied check
+    res.status(200).json(result);
+  } catch (err) {
+    console.warn('event/delete error');
+    console.log(err);
+    res.status(500).send(err.toString());
+  }
+});
+
 /**
  * @date UTC ISO String of a date for which to search free time.
  * @returns Array of free times as strings.
@@ -159,10 +205,11 @@ function getDateStartEnd(date) {
   };
 }
 
-async function getAllEvents(start, end, typeOfService) {
+async function getAllEvents(start, end, typeOfService, showCanceled = false) {
   const events = await EventModel.find({
     start: { $gte: start },
     end: { $lte: end },
+    canceled: showCanceled,
     typeOfService,
   }).lean();
   const staffEvents = await StaffEventModel.find({

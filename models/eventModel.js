@@ -27,7 +27,7 @@ const EventSchema = mongoose.Schema({
     enum: ['cosmetics', 'hair', 'massage'],
     required: true,
   },
-  cancelled: {
+  canceled: {
     type: Boolean,
     default: false,
   },
