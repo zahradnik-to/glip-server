@@ -2,8 +2,6 @@ const router = require('express').Router();
 
 const ProcedureModel = require('../models/procedureModel');
 // Todo sort auth
-const verifyToken = require('../middleware/isAuthenticated');
-const verifyRole = require('../middleware/isAuthorized');
 
 router.post('/create', async (req, res) => {
   const procedure = req.body;
