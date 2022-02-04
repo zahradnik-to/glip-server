@@ -5,6 +5,7 @@ const {
 } = require('date-fns');
 const EventModel = require('../models/eventModel');
 const StaffEventModel = require('../models/staffEventModel');
+const ProcedureModel = require('../models/procedureModel');
 
 // Todo make this customizable?
 const WORK_TIME_BEGIN = 7;
@@ -17,9 +18,11 @@ const APPOINTMENT_GRANULARITY_MINUTES = 15;
  */
 router.post('/create-event', async (req, res) => {
   const event = req.body;
+  const procedure = await ProcedureModel.findById({ _id: event.procedureId }).lean();
+
   event.title = `${event.lastname}`;
-  event.end = calculateEventEnd(event.start, event.duration).toISOString();
-  console.log(req.user);
+  event.end = calculateEventEnd(event.start, procedure.duration).toISOString();
+
   if (req.user) event.customerId = req.user._id;
 
   try {
@@ -36,17 +39,24 @@ router.post('/create-event', async (req, res) => {
 router.put('/update-event', async (req, res) => {
   const update = req.body;
   const {
-    _id, start, dateTimeChange,
+    _id, dateTimeChange, procedureId,
   } = update;
+  let { start } = update;
   try {
     const foundEvent = await EventModel.findById(_id).lean();
     const { typeOfService } = foundEvent;
+    if (!start) start = foundEvent.start;
 
     let duration;
-    if (update.duration) duration = update.duration;
-    else duration = foundEvent.duration;
+    if (procedureId) {
+      const newProcedure = await ProcedureModel.findById(procedureId).lean();
+      duration = newProcedure.duration;
+    } else {
+      const newProcedure = await ProcedureModel.findById(foundEvent.procedureId).lean();
+      duration = newProcedure.duration;
+    }
 
-    if (dateTimeChange) {
+    if (dateTimeChange || procedureId) {
       update.end = calculateEventEnd(start, duration).toISOString();
     }
 

@@ -1,6 +1,7 @@
 const router = require('express').Router();
 
 const ProcedureModel = require('../models/procedureModel');
+const EventModel = require('../models/eventModel');
 // Todo sort auth
 
 router.post('/create', async (req, res) => {
@@ -22,7 +23,7 @@ router.get('/get', async (req, res) => {
     if (!typeOfService && isAdmin) {
       procedures = await ProcedureModel.find().lean();
     } else {
-      procedures = await ProcedureModel.find({ typeOfService }).lean();
+      procedures = await ProcedureModel.find({ typeOfService, disabled: false }).lean();
     }
     res.status(200).json(procedures);
   } catch (err) {
@@ -33,12 +34,20 @@ router.get('/get', async (req, res) => {
 });
 
 router.delete('/delete', async (req, res) => {
-  const { id } = req.body;
+  const { _id } = req.body;
   try {
-    const procedure = await ProcedureModel.find({ _id: id }).lean();
+    const procedure = await ProcedureModel.find({ _id }).lean();
     if (!procedure.length) throw new Error('Procedure set for deletion not found!');
 
-    const result = await ProcedureModel.deleteOne({ _id: id });
+    // Todo only delete procedure if it was never used
+    const foundEvents = EventModel.find({ procedureId: _id });
+    let result;
+    if (foundEvents.length) {
+      result = await ProcedureModel.updateOne({ _id }, { disabled: true });
+    } else {
+      result = await ProcedureModel.deleteOne({ _id });
+    }
+
     res.status(200).json(result);
   } catch (err) {
     console.warn('procedure/delete error');

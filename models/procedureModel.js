@@ -11,8 +11,11 @@ const ProcedureSchema = mongoose.Schema({
   },
   typeOfService: {
     type: String,
-    enum: ['cosmetics', 'hair', 'massage'],
     required: true,
+  },
+  disabled: {
+    type: Boolean,
+    default: false,
   },
 });
 
