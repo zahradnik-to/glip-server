@@ -2,6 +2,8 @@ const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const User = require('../models/userModel');
 
+const adminEmails = process.env.ADMIN_EMAILS.split(',');
+
 passport.use(
   new GoogleStrategy(
     {
@@ -14,9 +16,11 @@ passport.use(
       User.findOne({ googleId: profile.id }, (err, user) => {
         if (err) { return done(err, null); }
         if (!user) {
+          const email = profile.emails[0].value;
           const userDocument = new User({
-            email: profile.emails[0].value,
+            email,
             googleId: profile.id,
+            isAdmin: adminEmails.includes(email),
           });
           userDocument.save()
             .then(() => done(null, profile));

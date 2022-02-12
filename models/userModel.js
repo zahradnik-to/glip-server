@@ -19,8 +19,7 @@ const UserSchema = new mongoose.Schema({
     default: 'user',
   },
 
-  pretendRole: { // Todo get rid of this?
-    enum: Object.values(userRoles),
+  isAdmin: {
     type: Boolean,
   },
 });

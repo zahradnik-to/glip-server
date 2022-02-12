@@ -6,7 +6,11 @@ const EventModel = require('../models/eventModel');
 
 router.post('/create', async (req, res) => {
   const procedure = req.body;
+  const { isAdmin } = req.user;
   try {
+    if (procedure.typeOfService !== req.user.role && !isAdmin) {
+      throw new Error('Staff member does not have the authority to create this procedure!');
+    }
     const procedureModel = ProcedureModel(procedure);
     await procedureModel.save();
     res.status(201).json(procedure);
@@ -17,8 +21,8 @@ router.post('/create', async (req, res) => {
 
 router.get('/get', async (req, res) => {
   let procedures;
-  const typeOfService = req.query.tos;
-  const isAdmin = true; // Todo admin authentication
+  const { typeOfService } = req.query;
+  const { isAdmin } = req.user;
   try {
     if (!typeOfService && isAdmin) {
       procedures = await ProcedureModel.find().lean();
