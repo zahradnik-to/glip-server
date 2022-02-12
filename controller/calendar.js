@@ -107,7 +107,7 @@ router.get('/get-events', async (req, res) => {
     allEvents = await getAllEvents(
       new Date(req.query.start).toISOString(),
       new Date(req.query.end).toISOString(),
-      req.query.tos,
+      req.query.typeOfService,
       req.query.showCanceled,
     );
     res.status(200).json(allEvents);
@@ -191,8 +191,7 @@ router.put('/cancel-event', async (req, res) => {
  */
 router.get('/get-free-time', async (req, res) => {
   const { dateStart, dateEnd } = getDateStartEnd(req.query.date);
-  console.log({ dateStart, dateEnd });
-  const typeOfService = req.query.tos;
+  const { typeOfService } = req.query;
 
   let allEvents;
   try {
