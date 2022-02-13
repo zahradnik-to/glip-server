@@ -2,6 +2,7 @@ const express = require('express');
 const UserModel = require('../models/userModel');
 const User = require('../models/userModel');
 const { UserRoles } = require('../models/roleModel');
+const EventModel = require('../models/eventModel');
 
 const router = express.Router();
 
@@ -46,18 +47,13 @@ router.delete('/delete', async (req, res) => {
 
 /**
  * Primarily used to update users role.
- * Admins main role can never be updated, update his pretendRole instead.
  */
 router.put('/update', async (req, res) => {
   const { _id, role } = req.body;
   try {
-    const user = await User.findOne({ _id });
-
-    if (user.role === UserRoles.ADMIN) user.pretendRole = role;
-    else user.role = role;
-
-    await user.save();
-    res.status(200);
+    const result = await UserModel.findByIdAndUpdate({ _id }, { role }, { new: true }).lean();
+    console.log(result);
+    res.sendStatus(200);
   } catch (err) {
     console.warn('user/update error');
     console.log(err);
