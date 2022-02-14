@@ -6,6 +6,10 @@ const {
 const EventModel = require('../models/eventModel');
 const StaffEventModel = require('../models/staffEventModel');
 const ProcedureModel = require('../models/procedureModel');
+const { isAuth } = require('../middleware/isAuthenticated');
+const { verifyRole, verifyAuthor } = require('../middleware/isAuthorized');
+const { STAFF } = require('../models/roleModel');
+const { verifyRoleOrAuthor } = require('../middleware/isAuthorized');
 
 // Todo make this customizable?
 const WORK_TIME_BEGIN = 7;
@@ -23,7 +27,7 @@ router.post('/create-event', async (req, res) => {
   event.title = `${event.lastname}`;
   event.end = calculateEventEnd(event.start, procedure.duration).toISOString();
 
-  if (req.user) event.customerId = req.user._id;
+  if (req.isAuthenticated()) event.customerId = req.user._id;
 
   try {
     await EventModel(event).save();
@@ -36,7 +40,8 @@ router.post('/create-event', async (req, res) => {
   }
 });
 
-router.put('/update-event', async (req, res) => {
+router.put('/update-event', isAuth, async (req, res) => {
+  const { user } = req;
   const update = req.body;
   const {
     _id, dateTimeChange, procedureId,
@@ -44,6 +49,9 @@ router.put('/update-event', async (req, res) => {
   let { start } = update;
   try {
     const foundEvent = await EventModel.findById(_id).lean();
+    // Only staff with role or author can update
+    if (!verifyRoleOrAuthor(foundEvent.typeOfService, user, foundEvent.customerId)) return res.sendStatus(403);
+
     const { typeOfService } = foundEvent;
     if (!start) start = foundEvent.start;
 
@@ -68,120 +76,135 @@ router.put('/update-event', async (req, res) => {
     } else {
       await checkRemainingFreeTime(foundEvent.start, typeOfService);
     }
-    //  check old date, check new date
-    res.status(200).json(result.modifiedCount);
+    //  Check old date, check new date
+    return res.status(200).json(result.modifiedCount);
   } catch (err) {
-    console.warn('event/update error');
     console.error(err);
-    res.status(500).send(err.toString());
+    return res.status(500).send(err.toString());
   }
 });
 
-router.put('/update-staff-event', async (req, res) => {
+router.put('/update-staff-event', isAuth, async (req, res) => {
   const { _id } = req.body;
+  const { user } = req;
   try {
+    const foundEvent = await StaffEventModel.findById(_id).lean();
+    if (!verifyAuthor(user, foundEvent.staffId)) return res.sendStatus(403);
+
     const result = await StaffEventModel.findOneAndUpdate({ _id }, req.body, { new: true });
-    res.status(200).json(result);
+    return res.status(200).json(result);
   } catch (err) {
     console.warn('staff-event/update error');
     console.error(err);
-    res.status(500).send(err.toString());
+    return res.status(500).send(err.toString());
   }
 });
 
-router.post('/create-vacation', async (req, res) => {
+router.post('/create-staff-event', isAuth, async (req, res) => {
   const event = req.body;
+  if (!verifyRole(STAFF, req.user)) return res.sendStatus(403);
+  event.staffId = req.user._id;
   try {
     await StaffEventModel(event).save();
     await checkRemainingFreeTime(req.body.start, req.body.typeOfService);
-    res.status(201).json(event);
+    return res.status(201).json(event);
   } catch (err) {
     console.error(err);
-    res.status(500).send(err.toString());
+    return res.sendStatus(500);
   }
 });
 
-router.get('/get-events', async (req, res) => {
-  let allEvents;
+router.get('/get-events', isAuth, async (req, res) => {
+  let events;
   try {
-    allEvents = await getAllEvents(
-      new Date(req.query.start).toISOString(),
-      new Date(req.query.end).toISOString(),
-      req.query.typeOfService,
-      req.query.showCanceled,
-    );
-    res.status(200).json(allEvents);
+    if (verifyRole(STAFF, req.user)) {
+      events = await getAllEvents(
+        new Date(req.query.start).toISOString(),
+        new Date(req.query.end).toISOString(),
+        req.query.typeOfService,
+        req.query.showCanceled,
+      );
+    } else {
+      events = await EventModel.find({
+        start: { $gte: new Date(req.query.start).toISOString() },
+        end: { $lte: new Date(req.query.end).toISOString() },
+        canceled: false,
+        customerId: req.user._id,
+      }).lean();
+    }
+    return res.status(200).json(events);
   } catch (err) {
     console.error(err);
+    return res.sendStatus(500);
   }
 });
 
-router.get('/get-event', async (req, res) => {
+router.get('/get-event', isAuth, async (req, res) => {
   const { _id } = req.query;
   EventModel.findById(_id, (err, docs) => {
-    if (err) {
-      console.error(err);
-      res.status(500).json(err);
-    } else {
-      res.status(200).json(docs);
-    }
+    if (err) return res.status(500).json(err);
+    if (!verifyRole(docs.typeOfService, req.user)) return res.sendStatus(403);
+    return res.status(200).json(docs);
   }).lean();
 });
 
-router.get('/get-staff-event', async (req, res) => {
+router.get('/get-staff-event', isAuth, async (req, res) => {
   const { _id } = req.query;
+  if (!verifyRole(STAFF, req.user)) return res.sendStatus(403);
   StaffEventModel.findById(_id, (err, docs) => {
-    if (err) {
-      console.log(err);
-      res.status(500).json(err);
-    } else {
-      res.status(200).json(docs);
-    }
+    if (err) return res.status(500).json(err);
+    return res.status(200).json(docs);
   }).lean();
 });
 
-router.delete('/delete-staff-event', async (req, res) => {
+router.delete('/delete-staff-event', isAuth, async (req, res) => {
   const { _id } = req.body;
+  const { user } = req;
   try {
     const foundEvent = await StaffEventModel.findOne({ _id }).lean();
-    if (!foundEvent) throw new Error('Staff event set for deletion not found!');
+    if (!foundEvent) return res.sendStatus(404);
+    if (!user.isAdmin && foundEvent.staffId !== user._id) return res.sendStatus(403);
 
     const result = await StaffEventModel.deleteOne({ _id });
     await deleteOccupiedEvent(new Date(foundEvent.start), foundEvent.typeOfService);
-    res.status(200).json(result);
+    return res.status(200).json(result);
   } catch (err) {
-    console.warn('staff-event/delete error');
     console.log(err);
-    res.status(500).send(err.toString());
+    return res.status(500).send(err.toString());
   }
 });
 
 router.delete('/delete-event', async (req, res) => {
   const { _id } = req.body;
+  const { user } = req;
   try {
     const foundEvent = await EventModel.findOne({ _id }).lean();
-    if (!foundEvent) throw new Error('Event set for deletion not found!');
+    if (!foundEvent) return res.sendStatus(404);
+    if (!user.isAdmin && foundEvent.staffId !== user._id) return res.sendStatus(403);
 
     const result = await EventModel.deleteOne({ _id });
     await deleteOccupiedEvent(foundEvent.start, foundEvent.typeOfService);
-    res.status(200).json(result);
+    return res.status(200).json(result);
   } catch (err) {
-    console.warn('event/delete error');
     console.log(err);
-    res.status(500).send(err.toString());
+    return res.status(500).send(err.toString());
   }
 });
 
-router.put('/cancel-event', async (req, res) => {
+router.put('/cancel-event', isAuth, async (req, res) => {
   const { _id, canceled } = req.body;
+  const { user } = req;
   try {
+    const foundEvent = await EventModel.findById(_id).lean();
+    // Only let cancel admin, role-staff or user author
+    if (!user.isAdmin && (foundEvent.customerId !== user._id && foundEvent.typeOfService !== user.role)) return res.sendStatus(403);
+
     const result = await EventModel.findByIdAndUpdate({ _id }, { canceled }, { new: true }).lean();
     await deleteOccupiedEvent(result.start, result.typeOfService);
-    res.status(200).json(result);
+    return res.status(200).json(result);
   } catch (err) {
-    console.warn('event/delete error');
     console.log(err);
-    res.status(500).send(err.toString());
+    return res.status(500).send(err.toString());
   }
 });
 
@@ -201,7 +224,7 @@ router.get('/get-free-time', async (req, res) => {
   }
 
   const freeTime = calculateFreeTime(new Date(dateStart), allEvents);
-  res.json(freeTime);
+  return res.status(200).json(freeTime);
 });
 
 /**

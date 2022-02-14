@@ -36,4 +36,11 @@ const verifyToken = async (req, res, next) => {
   }
 };
 
-module.exports = verifyToken;
+const isAuth = async (req, res, next) => {
+  if (!req.isAuthenticated()) {
+    return res.status(401).json('You need to login.');
+  }
+  return next();
+};
+
+module.exports = { verifyToken, isAuth };

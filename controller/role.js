@@ -1,5 +1,9 @@
 const express = require('express');
-const { RoleModel, initialUserRoles, userRoles } = require('../models/roleModel');
+const {
+  RoleModel, initialUserRoles, userRoles, STAFF,
+} = require('../models/roleModel');
+const { isAuth } = require('../middleware/isAuthenticated');
+const { verifyRole } = require('../middleware/isAuthorized');
 
 const router = express.Router();
 
@@ -14,8 +18,9 @@ RoleModel.findOne({}, async (err, doc) => {
   }
 });
 
-router.get('/get', async (req, res) => {
+router.get('/get', isAuth, async (req, res) => {
   const { getPretend } = req.query;
+  if (!verifyRole(STAFF, req.user)) return res.sendStatus(403);
   try {
     let roles = await RoleModel.find().lean();
     if (!getPretend) roles = roles.filter((role) => role.name !== userRoles.ADMIN);

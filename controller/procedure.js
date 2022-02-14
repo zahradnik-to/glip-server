@@ -2,68 +2,63 @@ const router = require('express').Router();
 
 const ProcedureModel = require('../models/procedureModel');
 const EventModel = require('../models/eventModel');
-// Todo sort auth
+const { verifyRole } = require('../middleware/isAuthorized');
+const { isAuth } = require('../middleware/isAuthenticated');
 
-router.post('/create', async (req, res) => {
+router.post('/create', isAuth, async (req, res) => {
   const procedure = req.body;
-  const { isAdmin } = req.user;
+  if (!verifyRole(procedure.typeOfService, req.user)) return res.sendStatus(403);
   try {
-    if (procedure.typeOfService !== req.user.role && !isAdmin) {
-      throw new Error('Staff member does not have the authority to create this procedure!');
-    }
     const procedureModel = ProcedureModel(procedure);
     await procedureModel.save();
-    res.status(201).json(procedure);
+    return res.status(201).json(procedure);
   } catch (err) {
-    res.status(501).json(err);
+    return res.status(501).json(err);
   }
 });
 
 router.get('/get', async (req, res) => {
   let procedures;
   const { typeOfService } = req.query;
-  const { isAdmin } = req.user;
+  const isAdmin = req.isAuthenticated() ? req.user.isAdmin : false;
   try {
     if (!typeOfService && isAdmin) {
       procedures = await ProcedureModel.find().lean();
     } else {
       procedures = await ProcedureModel.find({ typeOfService, disabled: false }).lean();
     }
-    res.status(200).json(procedures);
+    return res.status(200).json(procedures);
   } catch (err) {
     console.warn('procedure/get error');
     console.log(err);
-    res.status(500).json(err);
+    return res.status(500).json(err);
   }
 });
 
-router.delete('/delete', async (req, res) => {
+router.delete('/delete', isAuth, async (req, res) => {
   const { _id } = req.body;
   try {
     const procedure = await ProcedureModel.find({ _id }).lean();
-    if (!procedure.length) throw new Error('Procedure set for deletion not found!');
+    if (!procedure.length) return res.sendStatus(404);
+    if (!verifyRole(procedure.typeOfService, req.user)) return res.sendStatus(403);
 
-    // Todo only delete procedure if it was never used
     const foundEvents = EventModel.find({ procedureId: _id });
-    let result;
-    if (foundEvents.length) {
-      result = await ProcedureModel.updateOne({ _id }, { disabled: true });
-    } else {
-      result = await ProcedureModel.deleteOne({ _id });
-    }
+    if (foundEvents.length) await ProcedureModel.updateOne({ _id }, { disabled: true }).lean();
+    else await ProcedureModel.deleteOne({ _id }).lean();
 
-    res.status(200).json(result);
+    return res.sendStatus(200);
   } catch (err) {
     console.warn('procedure/delete error');
     console.log(err);
-    res.status(500).send(err.toString());
+    return res.status(500).send(err.toString());
   }
 });
 
-router.put('/update', async (req, res) => {
+router.put('/update', isAuth, async (req, res) => {
   const {
     _id, name, duration, typeOfService,
   } = req.body;
+  if (!verifyRole(typeOfService, req.user)) return res.sendStatus(403);
   try {
     const update = {
       name,
@@ -71,11 +66,11 @@ router.put('/update', async (req, res) => {
       typeOfService,
     };
     const result = await ProcedureModel.findOneAndUpdate({ _id }, update, { new: true }).lean();
-    res.status(200).json(result);
+    return res.status(200).json(result);
   } catch (err) {
     console.warn('procedure/update error');
     console.log(err);
-    res.status(500).send(err.toString());
+    return res.status(500).send(err.toString());
   }
 });
 

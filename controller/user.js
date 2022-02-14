@@ -1,8 +1,7 @@
 const express = require('express');
 const UserModel = require('../models/userModel');
-const User = require('../models/userModel');
-const { UserRoles } = require('../models/roleModel');
-const EventModel = require('../models/eventModel');
+const { verifyRole } = require('../middleware/isAuthorized');
+const { isAuth } = require('../middleware/isAuthenticated');
 
 const router = express.Router();
 
@@ -18,7 +17,7 @@ router.get('/get', async (req, res) => {
   }
 });
 
-router.get('/get-many', async (req, res) => {
+router.get('/get-many', isAuth, async (req, res) => {
   try {
     const filter = req.query;
     const users = await UserModel.find(filter).lean();
