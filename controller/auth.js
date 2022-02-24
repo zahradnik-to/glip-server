@@ -25,7 +25,7 @@ router.get('/login/failed', (req, res) => res.status(401).json({
 
 router.get('/logout', (req, res) => {
   req.logout();
-  res.redirect(CLIENT_URL);
+  return res.redirect(CLIENT_URL);
 });
 
 router.get('/google', passport.authenticate('google', { scope: ['profile', 'email'] }));

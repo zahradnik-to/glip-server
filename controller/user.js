@@ -34,7 +34,7 @@ router.delete('/delete', async (req, res) => {
   try {
     const user = await UserModel.find({ _id: id }).lean();
     console.log('user', user);
-    if (!user.length) throw new Error('User set for deletion not found!');
+    if (!user.length) throw new Error('Uživatel nebyl nalezen!');
 
     const result = await UserModel.deleteOne({ _id: id });
     return res.status(200).json(result);
