@@ -5,10 +5,6 @@ const EventSchema = mongoose.Schema({
   start: Date,
   end: Date,
   title: String,
-  allDay: {
-    type: Boolean,
-    default: false,
-  },
   display: String, // background
 
   // extendedProps

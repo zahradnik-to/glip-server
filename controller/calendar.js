@@ -8,7 +8,7 @@ const StaffEventModel = require('../models/staffEventModel');
 const ProcedureModel = require('../models/procedureModel');
 const { isAuth } = require('../middleware/isAuthenticated');
 const { verifyRole, verifyAuthor } = require('../middleware/isAuthorized');
-const { STAFF } = require('../models/roleModel');
+const { STAFF, userRoles } = require('../models/roleModel');
 const { verifyRoleOrAuthor } = require('../middleware/isAuthorized');
 
 // Todo make this customizable?
@@ -22,21 +22,39 @@ const APPOINTMENT_GRANULARITY_MINUTES = 15;
  */
 router.post('/create-event', async (req, res) => {
   const event = req.body;
-  const procedure = await ProcedureModel.findById({ _id: event.procedureId }).lean();
+  if (!isCreateEventDtoInValid(event)) return res.status(500).json('Neplatný formulář.');
+  if (isPast(new Date(event.date))) return res.status(500).json('Nelze založit událost v minulosti.');
+
+  // Find provided procedure
+  let procedure;
+  try {
+    procedure = await ProcedureModel.findById({ _id: event.procedureId }).lean();
+  } catch (err) {
+    console.error(err);
+    return res.status(404).json('Služba nenalazena.');
+  }
 
   event.title = `${event.lastname}`;
   event.end = calculateEventEnd(event.start, procedure.duration).toISOString();
-
   if (req.isAuthenticated()) event.customerId = req.user._id;
+
+  // Make sure the selected time is still not occupied or during vacation
+  const { dateStart, dateEnd } = getDateStartEnd(event.start);
+  let allEvents;
+  try {
+    allEvents = await getAllEvents(dateStart, dateEnd, event.typeOfService);
+  } catch (err) { return res.status(500); }
+  const freeTime = calculateFreeTime(new Date(dateStart), allEvents, procedure.duration);
+  if (!freeTime.includes(event.eventTime)) return res.status(500).json('Termín byl již obsazen. Zkuste to znovu.');
 
   try {
     await EventModel(event).save();
     // If there is no more free time, create all day BC event.
-    await checkRemainingFreeTime(req.body.date, req.body.typeOfService);
-    res.status(201).json(event);
+    await checkRemainingFreeTime(event.date, event.typeOfService, allEvents);
+    return res.status(201).json(event);
   } catch (err) {
     console.error(err);
-    res.status(500).send(err.toString());
+    return res.status(500).send(err.toString());
   }
 });
 
@@ -80,7 +98,7 @@ router.put('/update-event', isAuth, async (req, res) => {
     return res.status(200).json(result.modifiedCount);
   } catch (err) {
     console.error(err);
-    return res.status(500).send(err.toString());
+    return res.sendStatus(500);
   }
 });
 
@@ -96,7 +114,7 @@ router.put('/update-staff-event', isAuth, async (req, res) => {
   } catch (err) {
     console.warn('staff-event/update error');
     console.error(err);
-    return res.status(500).send(err.toString());
+    return res.status(500).json(err);
   }
 });
 
@@ -110,7 +128,7 @@ router.post('/create-staff-event', isAuth, async (req, res) => {
     return res.status(201).json(event);
   } catch (err) {
     console.error(err);
-    return res.sendStatus(500);
+    return res.status(500).json(err);
   }
 });
 
@@ -155,32 +173,29 @@ router.get('/get-staff-event', isAuth, async (req, res) => {
     if (err) return res.status(500).json(err);
     return res.status(200).json(docs);
   }).lean();
+  return res.sendStatus(500);
 });
 
 router.delete('/delete-staff-event', isAuth, async (req, res) => {
   const { _id } = req.body;
-  const { user } = req;
   try {
-    const foundEvent = await StaffEventModel.findOne({ _id }).lean();
-    if (!foundEvent) return res.sendStatus(404);
-    if (!user.isAdmin && foundEvent.staffId !== user._id) return res.sendStatus(403);
+    const foundEvent = await StaffEventModel.findById(_id).lean();
+    if (!verifyAuthor(req.user, foundEvent.staffId)) return res.sendStatus(403);
 
     const result = await StaffEventModel.deleteOne({ _id });
     await deleteOccupiedEvent(new Date(foundEvent.start), foundEvent.typeOfService);
     return res.status(200).json(result);
   } catch (err) {
     console.log(err);
-    return res.status(500).send(err.toString());
+    return res.status(500).json(err);
   }
 });
 
-router.delete('/delete-event', async (req, res) => {
+router.delete('/delete-event', isAuth, async (req, res) => {
   const { _id } = req.body;
-  const { user } = req;
   try {
-    const foundEvent = await EventModel.findOne({ _id }).lean();
-    if (!foundEvent) return res.sendStatus(404);
-    if (!user.isAdmin && foundEvent.staffId !== user._id) return res.sendStatus(403);
+    const foundEvent = await EventModel.findById(_id).lean();
+    if (!verifyRole(userRoles.ADMIN, req.user)) return res.sendStatus(403);
 
     const result = await EventModel.deleteOne({ _id });
     await deleteOccupiedEvent(foundEvent.start, foundEvent.typeOfService);
@@ -208,22 +223,27 @@ router.put('/cancel-event', isAuth, async (req, res) => {
   }
 });
 
-/**
- * @date UTC ISO String of a date for which to search free time.
- * @returns Array of free times as strings.
- */
 router.get('/get-free-time', async (req, res) => {
   const { dateStart, dateEnd } = getDateStartEnd(req.query.date);
-  const { typeOfService } = req.query;
+  const { typeOfService, procedureId, eventId } = req.query;
+
+  let procedure;
+  try {
+    procedure = await ProcedureModel.findById(procedureId).lean();
+  } catch (err) {
+    console.error(err);
+    return res.sendStatus(500);
+  }
 
   let allEvents;
   try {
     allEvents = await getAllEvents(dateStart, dateEnd, typeOfService);
   } catch (err) {
     console.error(err);
+    return res.sendStatus(500);
   }
 
-  const freeTime = calculateFreeTime(new Date(dateStart), allEvents);
+  const freeTime = calculateFreeTime(new Date(dateStart), allEvents, procedure.duration, eventId);
   return res.status(200).json(freeTime);
 });
 
@@ -231,15 +251,20 @@ router.get('/get-free-time', async (req, res) => {
  * Checks remaining free time for a specific date, then creates or deletes occupied event accordingly.
  * @param date Date to be scanned. Time does not matter.
  * @param typeOfService
+ * @param providedEvents When supplied func will use these events to save from another db call.
  * @returns {Promise<void>}
  */
-async function checkRemainingFreeTime(date, typeOfService) {
+async function checkRemainingFreeTime(date, typeOfService, providedEvents) {
   const { dateStart, dateEnd } = getDateStartEnd(date);
-  const events = await getAllEvents(dateStart, dateEnd, typeOfService);
-  const freeTime = calculateFreeTime(new Date(dateStart), events, true);
-  if (!freeTime.length) {
-    // No free time
-    console.log(`No free time for ${dateStart}`);
+  let events;
+  if (providedEvents) {
+    events = providedEvents;
+  } else {
+    events = await getAllEvents(dateStart, dateEnd, typeOfService);
+  }
+  const isBooked = isFullyBooked(new Date(dateStart), events);
+  if (isBooked) {
+    // No free time, add booked event
     await StaffEventModel({
       start: dateStart,
       end: dateEnd,
@@ -251,6 +276,12 @@ async function checkRemainingFreeTime(date, typeOfService) {
   }
 }
 
+/**
+ * Deletes occupied background event from a date.
+ * @param date
+ * @param typeOfService
+ * @returns {Promise<*>}
+ */
 async function deleteOccupiedEvent(date, typeOfService) {
   const { dateStart, dateEnd } = getDateStartEnd(date);
   const deleteCriteria = {
@@ -259,9 +290,14 @@ async function deleteOccupiedEvent(date, typeOfService) {
     eventType: 'occupied',
     typeOfService,
   };
-  await StaffEventModel.findOneAndDelete(deleteCriteria);
+  return StaffEventModel.findOneAndDelete(deleteCriteria);
 }
 
+/**
+ * Returns ISO string of the beginning and end of a provided date.
+ * @param date Day for which we need start and end.
+ * @returns {{dateStart: string, dateEnd: string}}
+ */
 function getDateStartEnd(date) {
   const dateStart = new Date(date);
   dateStart.setHours(0, 0, 0, 0); // 2 lines to keep dateStart as Date obj
@@ -271,6 +307,92 @@ function getDateStartEnd(date) {
   };
 }
 
+function calculateEventEnd(start, duration) {
+  return new Date(addMinutes(new Date(start), duration));
+}
+
+/**
+ * Returns free time for an appointment based on events in DB.
+ * @param date
+ * @param events Array of events to look through.
+ * @param procedureDuration Duration of procedure being created.
+ * @param eventId Only used when calculating for already existing event.ws
+ * @returns {String[]} Array of strings representing free times for an appointment.
+ */
+function calculateFreeTime(date, events, procedureDuration, eventId = '') {
+  const freeTime = [];
+  const startTime = addHours(date, WORK_TIME_BEGIN).getTime();
+  const endTime = addHours(date, WORK_TIME_END).getTime();
+  const addMs = APPOINTMENT_GRANULARITY_MINUTES * 1e3 * 60;
+  for (let currTime = startTime; currTime < endTime; currTime += addMs) {
+    if (isPast(new Date(currTime))) continue;
+
+    const procedureStart = currTime;
+    const procedureEnd = addMinutes(new Date(currTime), procedureDuration).getTime();
+    const eventExists = (e) => (e._id.toString() !== eventId) && ( // Prevent event from blocking itself
+      (Date.parse(e.start) >= procedureStart && Date.parse(e.start) < procedureEnd) // Found event starts in procedure interval
+      || (Date.parse(e.end) > procedureStart && Date.parse(e.end) < procedureEnd)); // Found event end in procedure interval
+    const foundEvent = events.find((eventExists));
+    if (foundEvent) {
+      currTime = foundEvent.end.getTime() - addMs;
+      continue;
+    }
+
+    freeTime.push(new Date(currTime).toLocaleTimeString('cs', {
+      hour: '2-digit',
+      minute: 'numeric',
+    }));
+  }
+  return freeTime;
+}
+
+/**
+ * Checks if provided date is fully occupied with events.
+ * @param date
+ * @param events Array of events to look through.
+ * @returns {boolean}
+ */
+function isFullyBooked(date, events) {
+  const startTime = addHours(date, WORK_TIME_BEGIN).getTime();
+  const endTime = addHours(date, WORK_TIME_END).getTime();
+  const addMs = APPOINTMENT_GRANULARITY_MINUTES * 1e3 * 60;
+  for (let currTime = startTime; currTime < endTime; currTime += addMs) {
+    if (isPast(new Date(currTime))) continue;
+
+    const eventExists = (e) => Date.parse(e.start) <= currTime && Date.parse(e.end) > currTime;
+    const foundEvent = events.find((eventExists));
+    if (foundEvent) {
+      currTime = foundEvent.end.getTime() - addMs;
+      continue;
+    }
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Returns true if dtoIn is valid.
+ * @param dtoIn
+ * @returns {boolean}
+ */
+function isCreateEventDtoInValid(dtoIn) {
+  if (!dtoIn.date) return false;
+  if (!dtoIn.lastname) return false;
+  if (!dtoIn.email) return false;
+  if (!dtoIn.procedureId) return false;
+  if (!dtoIn.typeOfService) return false;
+  if (dtoIn.canceled) return false;
+  return true;
+}
+
+/**
+ * Gathers regular and staff events and returns them in an array.
+ * @param start
+ * @param end
+ * @param typeOfService
+ * @param showCanceled
+ * @returns {Promise<*[]>}
+ */
 async function getAllEvents(start, end, typeOfService, showCanceled = false) {
   const events = await EventModel.find({
     start: { $gte: start },
@@ -285,41 +407,6 @@ async function getAllEvents(start, end, typeOfService, showCanceled = false) {
   }).lean();
 
   return [...events, ...staffEvents];
-}
-
-function calculateEventEnd(start, duration) {
-  return new Date(addMinutes(new Date(start), duration));
-}
-
-/**
- * Returns free time for an appointment based on events in DB.
- * @param date
- * @param events Array of events to look through.
- * @param fullyBookedCheck If true, function will return first found free time indicating that selected date is not fully booked.
- * @returns {*[]} Array of strings representing free times for an appointment.
- */
-function calculateFreeTime(date, events, fullyBookedCheck = false) {
-  const freeTime = [];
-  const startTime = addHours(date, WORK_TIME_BEGIN).getTime();
-  const endTime = addHours(date, WORK_TIME_END).getTime();
-  const addMs = APPOINTMENT_GRANULARITY_MINUTES * 1e3 * 60;
-  for (let currTime = startTime; currTime < endTime; currTime += addMs) {
-    if (isPast(date)) continue;
-
-    const eventExists = (e) => Date.parse(e.start) <= currTime && Date.parse(e.end) > currTime;
-    const foundEvent = events.find((eventExists));
-    if (foundEvent) {
-      currTime = foundEvent.end.getTime() - addMs;
-      continue;
-    }
-
-    freeTime.push(new Date(currTime).toLocaleTimeString('cs', {
-      hour: '2-digit',
-      minute: 'numeric',
-    }));
-    if (fullyBookedCheck) return freeTime;
-  }
-  return freeTime;
 }
 
 module.exports = router;

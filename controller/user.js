@@ -4,6 +4,7 @@ const { verifyRole } = require('../middleware/isAuthorized');
 const { isAuth } = require('../middleware/isAuthenticated');
 
 const router = express.Router();
+// Todo user auth
 
 router.get('/get', async (req, res) => {
   try {
@@ -36,11 +37,11 @@ router.delete('/delete', async (req, res) => {
     if (!user.length) throw new Error('User set for deletion not found!');
 
     const result = await UserModel.deleteOne({ _id: id });
-    res.status(200).json(result);
+    return res.status(200).json(result);
   } catch (err) {
     console.warn('user/delete error');
     console.log(err);
-    res.status(500).send(err.toString());
+    return res.status(500).send(err.toString());
   }
 });
 
