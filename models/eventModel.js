@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const mongoosePaginate = require('mongoose-paginate-v2');
 
 const EventSchema = mongoose.Schema({
   // FullCalendar properties
@@ -28,6 +29,8 @@ const EventSchema = mongoose.Schema({
     default: false,
   },
 });
+
+EventSchema.plugin(mongoosePaginate);
 
 const EventModel = mongoose.model('Event', EventSchema);
 module.exports = EventModel;

@@ -1,7 +1,7 @@
 const router = require('express').Router();
 
 const {
-  addMinutes, addDays, isPast, addHours,
+  addMinutes, addDays, subHours, isPast, addHours,
 } = require('date-fns');
 const EventModel = require('../models/eventModel');
 const StaffEventModel = require('../models/staffEventModel');
@@ -34,7 +34,7 @@ router.post('/create-event', async (req, res) => {
     return res.status(404).json('Služba nenalazena.');
   }
 
-  event.title = `${event.lastname}`;
+  event.title = `${procedure.name}`;
   event.end = calculateEventEnd(event.start, procedure.duration).toISOString();
   if (req.isAuthenticated()) event.customerId = req.user._id;
 
@@ -69,6 +69,11 @@ router.put('/update-event', isAuth, async (req, res) => {
     const foundEvent = await EventModel.findById(_id).lean();
     // Only staff with role or author can update
     if (!verifyRoleOrAuthor(foundEvent.typeOfService, user, foundEvent.customerId)) return res.sendStatus(403);
+    // User can only update notes
+    if (!verifyRole(STAFF, user)) {
+      const result = await EventModel.findOneAndUpdate({ _id }, { notes: req.body.notes }, { new: true });
+      return res.status(200).json(result.modifiedCount);
+    }
 
     const { typeOfService } = foundEvent;
     if (!start) start = foundEvent.start;
@@ -134,6 +139,7 @@ router.post('/create-staff-event', isAuth, async (req, res) => {
 
 router.get('/get-events', isAuth, async (req, res) => {
   let events;
+  let procedures;
   try {
     if (verifyRole(STAFF, req.user)) {
       events = await getAllEvents(
@@ -143,25 +149,81 @@ router.get('/get-events', isAuth, async (req, res) => {
         req.query.showCanceled,
       );
     } else {
+      // Get procedures
+      procedures = await ProcedureModel.find().lean();
+      const proceduresMap = new Map(procedures.map((p) => [p._id.toString(), p.name]));
+      // Get events and merge with procedures
       events = await EventModel.find({
         start: { $gte: new Date(req.query.start).toISOString() },
         end: { $lte: new Date(req.query.end).toISOString() },
         canceled: false,
         customerId: req.user._id,
       }).lean();
+      events = events.map((e) => ({ ...e, procedureName: proceduresMap.get(e.procedureId) }));
     }
-    return res.status(200).json(events);
   } catch (err) {
     console.error(err);
     return res.sendStatus(500);
   }
+  return res.status(200).json(events);
+});
+
+router.get('/get-events-list', isAuth, async (req, res) => {
+  let paginateEvents;
+  let procedures;
+  const options = {
+    page: req.query.page,
+    limit: 10,
+    sort: { start: 'desc' },
+    customLabels: {
+      docs: 'events',
+    },
+  };
+  const dtoIn = {
+    customerId: req.user._id,
+  };
+  try {
+    // Get procedures
+    console.time('Ev map');
+    procedures = await ProcedureModel.find().lean();
+    const proceduresMap = new Map(procedures.map((p) => [p._id.toString(), p.name]));
+    // Get events and merge with procedures
+    paginateEvents = await EventModel.paginate(dtoIn, options);
+    console.timeLog('Ev map');
+    let events = paginateEvents.events.map((e) => e.toObject());
+    events = events.map((e) => ({ ...e, procedureName: proceduresMap.get(e.procedureId) }));
+    paginateEvents.events = events;
+    console.timeEnd('Ev map');
+  } catch (err) {
+    console.error(err);
+    return res.sendStatus(500);
+  }
+
+  return res.status(200).json(paginateEvents);
+});
+
+router.get('/get-bg-events', async (req, res) => {
+  let events;
+  const { start, end, typeOfService } = req.query;
+  try {
+    events = await StaffEventModel.find({
+      start: { $gte: start },
+      end: { $lte: end },
+      typeOfService,
+    }, 'start end allDay display').lean();
+  } catch (err) {
+    console.error(err);
+    return res.sendStatus(500);
+  }
+
+  return res.status(200).json(events);
 });
 
 router.get('/get-event', isAuth, async (req, res) => {
   const { _id } = req.query;
-  EventModel.findById(_id, (err, docs) => {
-    if (err) return res.status(500).json(err);
-    if (!verifyRole(docs.typeOfService, req.user)) return res.sendStatus(403);
+  EventModel.findById(_id, '_id start end lastname email procedureId notes typeOfService customerId cancelled', (err, docs) => {
+    if (err) return res.sendStatus(500);
+    if (!verifyRoleOrAuthor(STAFF, docs.typeOfService, req.user)) return res.sendStatus(403);
     return res.status(200).json(docs);
   }).lean();
 });
@@ -209,10 +271,16 @@ router.delete('/delete-event', isAuth, async (req, res) => {
 router.put('/cancel-event', isAuth, async (req, res) => {
   const { _id, canceled } = req.body;
   const { user } = req;
+  const cancelCutoff = 24;
   try {
     const foundEvent = await EventModel.findById(_id).lean();
+    // Users can cancel event only more than 24 hours
+    const feStartDate = new Date(foundEvent.start);
+    const prevDay = subHours(feStartDate, cancelCutoff);
+    if ((isPast(feStartDate) || isPast(prevDay)) && !verifyRole(foundEvent.typeOfService, user)) return res.sendStatus(403);
     // Only let cancel admin, role-staff or user author
-    if (!user.isAdmin && (foundEvent.customerId !== user._id && foundEvent.typeOfService !== user.role)) return res.sendStatus(403);
+    if (!verifyRoleOrAuthor(foundEvent.typeOfService, user, foundEvent.customerId)) return res.sendStatus(403);
+    if (!canceled && !verifyRole(foundEvent.typeOfService, user)) return res.sendStatus(403); // Only staff can un-cancel event
 
     const result = await EventModel.findByIdAndUpdate({ _id }, { canceled }, { new: true }).lean();
     await deleteOccupiedEvent(result.start, result.typeOfService);
