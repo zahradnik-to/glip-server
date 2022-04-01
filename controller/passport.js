@@ -17,10 +17,12 @@ passport.use(
         if (err) { return done(err, null); }
         if (!user) {
           const email = profile.emails[0].value;
+          const isAdmin = adminEmails.includes(email);
           const userDocument = new User({
             email,
             googleId: profile.id,
-            isAdmin: adminEmails.includes(email),
+            isAdmin,
+            role: isAdmin ? 'admin' : 'user',
           });
           userDocument.save()
             .then(() => done(null, profile));

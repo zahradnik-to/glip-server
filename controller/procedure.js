@@ -1,21 +1,29 @@
 const router = require('express').Router();
 
+const { body } = require('express-validator');
 const ProcedureModel = require('../models/procedureModel');
 const EventModel = require('../models/eventModel');
 const { verifyRole } = require('../middleware/isAuthorized');
 const { isAuth } = require('../middleware/isAuthenticated');
 
-router.post('/create', isAuth, async (req, res) => {
-  const procedure = req.body;
-  if (!verifyRole(procedure.typeOfService, req.user)) return res.sendStatus(403);
-  try {
-    const procedureModel = ProcedureModel(procedure);
-    await procedureModel.save();
-    return res.status(201).json(procedure);
-  } catch (err) {
-    return res.status(501).json(err);
-  }
-});
+router.post(
+  '/create',
+  isAuth,
+  body('duration')
+    .isDivisibleBy(15)
+    .withMessage('Délka musí být dělitelná 15 minutami.'),
+  async (req, res) => {
+    const procedure = req.body;
+    if (!verifyRole(procedure.typeOfService, req.user)) return res.sendStatus(403);
+    try {
+      const procedureModel = ProcedureModel(procedure);
+      await procedureModel.save();
+      return res.status(201).json(procedure);
+    } catch (err) {
+      return res.status(501).json(err);
+    }
+  },
+);
 
 router.get('/get', async (req, res) => {
   let procedures;

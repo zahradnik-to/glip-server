@@ -3,6 +3,7 @@ const router = require('express').Router();
 const {
   addMinutes, addDays, subHours, isPast, addHours,
 } = require('date-fns');
+const { body, validationResult } = require('express-validator');
 const EventModel = require('../models/eventModel');
 const StaffEventModel = require('../models/staffEventModel');
 const ProcedureModel = require('../models/procedureModel');
@@ -17,46 +18,59 @@ const WORK_TIME_END = 17;
 const APPOINTMENT_GRANULARITY_MINUTES = 15;
 
 /**
- * Takes values from client form, fills missing parameters, saves to Mongo.
+ * Takes values from client form, validates, sanitizes them and creates new event in Mongo.
  * @return Object On resolve returns an object of saved document
  */
-router.post('/create-event', async (req, res) => {
-  const event = req.body;
-  if (!isCreateEventDtoInValid(event)) return res.status(500).json('Neplatný formulář.');
-  if (isPast(new Date(event.date))) return res.status(500).json('Nelze založit událost v minulosti.');
+router.post(
+  '/create-event',
+  body('email').isEmail().normalizeEmail(),
+  body('lastname').isLength({ min: 2 }),
+  body('procedureId').isMongoId(),
+  body('typeOfService').isString(),
+  body('date').isISO8601(),
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(500).json({ message: 'Neplatný formulář.', errors: errors.array() });
+    }
 
-  // Find provided procedure
-  let procedure;
-  try {
-    procedure = await ProcedureModel.findById({ _id: event.procedureId }).lean();
-  } catch (err) {
-    console.error(err);
-    return res.status(404).json('Služba nenalazena.');
-  }
+    const event = req.body;
+    if (isPast(new Date(event.date))) return res.status(500).json('Nelze založit událost v minulosti.');
 
-  event.title = `${procedure.name}`;
-  event.end = calculateEventEnd(event.start, procedure.duration).toISOString();
-  if (req.isAuthenticated()) event.customerId = req.user._id;
+    // Find provided procedure
+    let procedure;
+    try {
+      procedure = await ProcedureModel.findById({ _id: event.procedureId }).lean();
+    } catch (err) {
+      console.error(err);
+      return res.status(404).json('Služba nenalazena.');
+    }
 
-  // Make sure the selected time is still not occupied or during vacation
-  const { dateStart, dateEnd } = getDateStartEnd(event.start);
-  let allEvents;
-  try {
-    allEvents = await getAllEvents(dateStart, dateEnd, event.typeOfService);
-  } catch (err) { return res.status(500); }
-  const freeTime = calculateFreeTime(new Date(dateStart), allEvents, procedure.duration);
-  if (!freeTime.includes(event.eventTime)) return res.status(500).json('Termín byl již obsazen. Zkuste to znovu.');
+    event.title = `${procedure.name}`;
+    event.end = calculateEventEnd(event.start, procedure.duration).toISOString();
+    event.canceled = false;
+    if (req.isAuthenticated()) event.customerId = req.user._id;
 
-  try {
-    await EventModel(event).save();
-    // If there is no more free time, create all day BC event.
-    await checkRemainingFreeTime(event.date, event.typeOfService, allEvents);
-    return res.status(201).json(event);
-  } catch (err) {
-    console.error(err);
-    return res.status(500).send(err.toString());
-  }
-});
+    // Make sure the selected time is still not occupied or during vacation
+    const { dateStart, dateEnd } = getDateStartEnd(event.start);
+    let allEvents;
+    try {
+      allEvents = await getAllEvents(dateStart, dateEnd, event.typeOfService);
+    } catch (err) { return res.status(500); }
+    const freeTime = calculateFreeTime(new Date(dateStart), allEvents, procedure.duration);
+    if (!freeTime.includes(event.eventTime)) return res.status(500).json('Termín byl již obsazen. Zkuste to znovu.');
+
+    try {
+      await EventModel(event).save();
+      // If there is no more free time, create all day BC event.
+      await checkRemainingFreeTime(event.date, event.typeOfService, allEvents);
+      return res.status(201).json(event);
+    } catch (err) {
+      console.error(err);
+      return res.status(500).send(err.toString());
+    }
+  },
+);
 
 router.put('/update-event', isAuth, async (req, res) => {
   const { user } = req;
@@ -435,21 +449,6 @@ function isFullyBooked(date, events) {
     }
     return false;
   }
-  return true;
-}
-
-/**
- * Returns true if dtoIn is valid.
- * @param dtoIn
- * @returns {boolean}
- */
-function isCreateEventDtoInValid(dtoIn) {
-  if (!dtoIn.date) return false;
-  if (!dtoIn.lastname) return false;
-  if (!dtoIn.email) return false;
-  if (!dtoIn.procedureId) return false;
-  if (!dtoIn.typeOfService) return false;
-  if (dtoIn.canceled) return false;
   return true;
 }
 
