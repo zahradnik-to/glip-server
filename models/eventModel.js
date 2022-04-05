@@ -12,6 +12,7 @@ const EventSchema = mongoose.Schema({
   lastname: String,
   email: String,
   duration: Number,
+  phoneNumber: String,
   procedureId: String,
   notes: String,
   staffNotes: String,

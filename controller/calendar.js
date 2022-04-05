@@ -12,7 +12,6 @@ const { verifyRole, verifyAuthor } = require('../middleware/isAuthorized');
 const { STAFF, userRoles } = require('../models/roleModel');
 const { verifyRoleOrAuthor } = require('../middleware/isAuthorized');
 
-// Todo make this customizable?
 const WORK_TIME_BEGIN = 7;
 const WORK_TIME_END = 17;
 const APPOINTMENT_GRANULARITY_MINUTES = 15;
@@ -28,9 +27,11 @@ router.post(
   body('procedureId').isMongoId(),
   body('typeOfService').isString(),
   body('date').isISO8601(),
+  body('phoneNumber').isMobilePhone('cs-CZ'),
   async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
+      console.log(errors.array());
       return res.status(500).json({ message: 'Neplatný formulář.', errors: errors.array() });
     }
 
@@ -56,7 +57,9 @@ router.post(
     let allEvents;
     try {
       allEvents = await getAllEvents(dateStart, dateEnd, event.typeOfService);
-    } catch (err) { return res.status(500); }
+    } catch (err) {
+      return res.sendStatus(500);
+    }
     const freeTime = calculateFreeTime(new Date(dateStart), allEvents, procedure.duration);
     if (!freeTime.includes(event.eventTime)) return res.status(500).json('Termín byl již obsazen. Zkuste to znovu.');
 
@@ -85,7 +88,7 @@ router.put('/update-event', isAuth, async (req, res) => {
     if (!verifyRoleOrAuthor(foundEvent.typeOfService, user, foundEvent.customerId)) return res.sendStatus(403);
     // User can only update notes
     if (!verifyRole(STAFF, user)) {
-      const result = await EventModel.findOneAndUpdate({ _id }, { notes: req.body.notes }, { new: true });
+      const result = await EventModel.findOneAndUpdate({ _id }, { notes: update.notes, phoneNumber: update.phoneNumber }, { new: true });
       return res.status(200).json(result.modifiedCount);
     }
 
@@ -113,7 +116,6 @@ router.put('/update-event', isAuth, async (req, res) => {
     } else {
       await checkRemainingFreeTime(foundEvent.start, typeOfService);
     }
-    //  Check old date, check new date
     return res.status(200).json(result.modifiedCount);
   } catch (err) {
     console.error(err);
@@ -155,7 +157,8 @@ router.get('/get-events', isAuth, async (req, res) => {
   let events;
   let procedures;
   try {
-    if (verifyRole(STAFF, req.user)) {
+    // When typeOfService is defined fetch everything - administration -> Admin with user role My appointments fix
+    if (req.query.typeOfService && verifyRole(STAFF, req.user)) {
       events = await getAllEvents(
         new Date(req.query.start).toISOString(),
         new Date(req.query.end).toISOString(),
@@ -198,16 +201,13 @@ router.get('/get-events-list', isAuth, async (req, res) => {
   };
   try {
     // Get procedures
-    console.time('Ev map');
     procedures = await ProcedureModel.find().lean();
     const proceduresMap = new Map(procedures.map((p) => [p._id.toString(), p.name]));
     // Get events and merge with procedures
     paginateEvents = await EventModel.paginate(dtoIn, options);
-    console.timeLog('Ev map');
     let events = paginateEvents.events.map((e) => e.toObject());
     events = events.map((e) => ({ ...e, procedureName: proceduresMap.get(e.procedureId) }));
     paginateEvents.events = events;
-    console.timeEnd('Ev map');
   } catch (err) {
     console.error(err);
     return res.sendStatus(500);
@@ -235,8 +235,10 @@ router.get('/get-bg-events', async (req, res) => {
 
 router.get('/get-event', isAuth, async (req, res) => {
   const { _id } = req.query;
-  EventModel.findById(_id, '_id start end lastname email procedureId notes typeOfService customerId cancelled', (err, docs) => {
+  EventModel.findById(_id, '_id title start end lastname email procedureId phoneNumber notes staffNotes typeOfService customerId canceled', (err, docs) => {
     if (err) return res.sendStatus(500);
+    // eslint-disable-next-line no-param-reassign
+    if (!verifyRole(STAFF, req.user)) delete docs.staffNotes;
     if (!verifyRoleOrAuthor(STAFF, docs.typeOfService, req.user)) return res.sendStatus(403);
     return res.status(200).json(docs);
   }).lean();
@@ -333,17 +335,11 @@ router.get('/get-free-time', async (req, res) => {
  * Checks remaining free time for a specific date, then creates or deletes occupied event accordingly.
  * @param date Date to be scanned. Time does not matter.
  * @param typeOfService
- * @param providedEvents When supplied func will use these events to save from another db call.
  * @returns {Promise<void>}
  */
-async function checkRemainingFreeTime(date, typeOfService, providedEvents) {
+async function checkRemainingFreeTime(date, typeOfService) {
   const { dateStart, dateEnd } = getDateStartEnd(date);
-  let events;
-  if (providedEvents) {
-    events = providedEvents;
-  } else {
-    events = await getAllEvents(dateStart, dateEnd, typeOfService);
-  }
+  const events = await getAllEvents(dateStart, dateEnd, typeOfService);
   const isBooked = isFullyBooked(new Date(dateStart), events);
   if (isBooked) {
     // No free time, add booked event
@@ -396,8 +392,8 @@ function calculateEventEnd(start, duration) {
 /**
  * Returns free time for an appointment based on events in DB.
  * @param date
- * @param events Array of events to look through.
- * @param procedureDuration Duration of procedure being created.
+ * @param events {Object[]} of events to look through.
+ * @param procedureDuration {Number} Duration of procedure being created.
  * @param eventId Only used when calculating for already existing event.ws
  * @returns {String[]} Array of strings representing free times for an appointment.
  */
@@ -411,9 +407,10 @@ function calculateFreeTime(date, events, procedureDuration, eventId = '') {
 
     const procedureStart = currTime;
     const procedureEnd = addMinutes(new Date(currTime), procedureDuration).getTime();
-    const eventExists = (e) => (e._id.toString() !== eventId) && ( // Prevent event from blocking itself
+    const eventExists = (e) => (e._id.toString() !== eventId) && ( // Prevent event from blocking itself when editing time
       (Date.parse(e.start) >= procedureStart && Date.parse(e.start) < procedureEnd) // Found event starts in procedure interval
       || (Date.parse(e.end) > procedureStart && Date.parse(e.end) < procedureEnd)); // Found event end in procedure interval
+
     const foundEvent = events.find((eventExists));
     if (foundEvent) {
       currTime = foundEvent.end.getTime() - addMs;
@@ -431,7 +428,7 @@ function calculateFreeTime(date, events, procedureDuration, eventId = '') {
 /**
  * Checks if provided date is fully occupied with events.
  * @param date
- * @param events Array of events to look through.
+ * @param events {Object[]} Array of events to look through.
  * @returns {boolean}
  */
 function isFullyBooked(date, events) {
