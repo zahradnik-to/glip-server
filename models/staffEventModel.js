@@ -18,7 +18,6 @@ const EventSchema = mongoose.Schema({
   },
   staffId: {
     type: String,
-    required: true,
   },
   staffNotes: String,
   eventType: String,

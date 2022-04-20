@@ -5,10 +5,10 @@ const { STAFF, userRoles } = require('../models/roleModel');
  */
 const verifyRole = (requiredRole, user) => {
   const { role, isAdmin } = user;
-  if (requiredRole === STAFF && role !== userRoles.USER) return true;
-  if (role !== requiredRole && !isAdmin) return false;
-
-  return true;
+  if (requiredRole === STAFF && role !== userRoles.USER) {
+    return true;
+  }
+  return !(role !== requiredRole && !isAdmin);
 };
 
 /**

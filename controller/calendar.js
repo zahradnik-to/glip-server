@@ -140,9 +140,9 @@ router.put('/update-staff-event', isAuth, async (req, res) => {
 });
 
 router.post('/create-staff-event', isAuth, async (req, res) => {
-  const event = req.body;
   if (!verifyRole(STAFF, req.user)) return res.sendStatus(403);
-  event.staffId = req.user._id;
+  const event = req.body;
+  event.staffId = req.user._id.toString();
   try {
     await StaffEventModel(event).save();
     await checkRemainingFreeTime(req.body.start, req.body.typeOfService);
@@ -248,10 +248,12 @@ router.get('/get-staff-event', isAuth, async (req, res) => {
   const { _id } = req.query;
   if (!verifyRole(STAFF, req.user)) return res.sendStatus(403);
   StaffEventModel.findById(_id, (err, docs) => {
-    if (err) return res.status(500).json(err);
+    if (err) {
+      console.log(err);
+      return res.status(500).json(err);
+    }
     return res.status(200).json(docs);
   }).lean();
-  return res.sendStatus(500);
 });
 
 router.delete('/delete-staff-event', isAuth, async (req, res) => {
