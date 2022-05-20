@@ -1,14 +1,11 @@
 const mongoose = require('mongoose');
 
-const STAFF = 'STAFF';
 const userRoles = {
   ADMIN: 'admin',
   USER: 'user',
-  COSMETICS: 'cosmetics',
-  HAIR: 'hair',
-  MASSAGE: 'massage',
+  STAFF: 'staff', // Constant meant to represent any role that is not user
 };
-const initialUserRoles = [userRoles.ADMIN, userRoles.USER, userRoles.COSMETICS, userRoles.HAIR, userRoles.MASSAGE];
+const initialUserRoles = [userRoles.ADMIN, userRoles.USER];
 
 const RoleSchema = new mongoose.Schema({
   name: {
@@ -16,9 +13,22 @@ const RoleSchema = new mongoose.Schema({
     required: true,
     unique: true,
   },
+
+  displayName: {
+    type: String,
+    unique: true,
+  },
+
+  type: {
+    type: String,
+    enum: ['role', 'staffRole'],
+    required: true,
+  },
+});
+
+RoleSchema.path('displayName').required(function () {
+  return this.type === 'staffRole';
 });
 
 const RoleModel = mongoose.model('Role', RoleSchema);
-module.exports = {
-  RoleModel, initialUserRoles, userRoles, STAFF,
-};
+module.exports = { RoleModel, initialUserRoles, userRoles };

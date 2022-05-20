@@ -9,7 +9,7 @@ const StaffEventModel = require('../models/staffEventModel');
 const ProcedureModel = require('../models/procedureModel');
 const { isAuth } = require('../middleware/isAuthenticated');
 const { verifyRole, verifyAuthor } = require('../middleware/isAuthorized');
-const { STAFF, userRoles } = require('../models/roleModel');
+const { userRoles } = require('../models/roleModel');
 const { verifyRoleOrAuthor } = require('../middleware/isAuthorized');
 
 const WORK_TIME_BEGIN = 7;
@@ -87,7 +87,7 @@ router.put('/update-event', isAuth, async (req, res) => {
     // Only staff with role or author can update
     if (!verifyRoleOrAuthor(foundEvent.typeOfService, user, foundEvent.customerId)) return res.sendStatus(403);
     // User can only update notes
-    if (!verifyRole(STAFF, user)) {
+    if (!verifyRole(userRoles.STAFF, user)) {
       const result = await EventModel.findOneAndUpdate({ _id }, { notes: update.notes, phoneNumber: update.phoneNumber }, { new: true });
       return res.status(200).json(result.modifiedCount);
     }
@@ -140,7 +140,7 @@ router.put('/update-staff-event', isAuth, async (req, res) => {
 });
 
 router.post('/create-staff-event', isAuth, async (req, res) => {
-  if (!verifyRole(STAFF, req.user)) return res.sendStatus(403);
+  if (!verifyRole(userRoles.STAFF, req.user)) return res.sendStatus(403);
   const event = req.body;
   event.staffId = req.user._id.toString();
   try {
@@ -158,7 +158,7 @@ router.get('/get-events', isAuth, async (req, res) => {
   let procedures;
   try {
     // When typeOfService is defined fetch everything - administration -> Admin with user role My appointments fix
-    if (req.query.typeOfService && verifyRole(STAFF, req.user)) {
+    if (req.query.typeOfService && verifyRole(userRoles.STAFF, req.user)) {
       events = await getAllEvents(
         new Date(req.query.start).toISOString(),
         new Date(req.query.end).toISOString(),
@@ -238,15 +238,15 @@ router.get('/get-event', isAuth, async (req, res) => {
   EventModel.findById(_id, '_id title start end lastname email procedureId phoneNumber notes staffNotes typeOfService customerId canceled', (err, docs) => {
     if (err) return res.sendStatus(500);
     // eslint-disable-next-line no-param-reassign
-    if (!verifyRole(STAFF, req.user)) delete docs.staffNotes;
-    if (!verifyRoleOrAuthor(STAFF, docs.typeOfService, req.user)) return res.sendStatus(403);
+    if (!verifyRole(userRoles.STAFF, req.user)) delete docs.staffNotes;
+    if (!verifyRoleOrAuthor(userRoles.STAFF, docs.typeOfService, req.user)) return res.sendStatus(403);
     return res.status(200).json(docs);
   }).lean();
 });
 
 router.get('/get-staff-event', isAuth, async (req, res) => {
   const { _id } = req.query;
-  if (!verifyRole(STAFF, req.user)) return res.sendStatus(403);
+  if (!verifyRole(userRoles.STAFF, req.user)) return res.sendStatus(403);
   StaffEventModel.findById(_id, (err, docs) => {
     if (err) {
       console.log(err);

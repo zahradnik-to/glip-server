@@ -37,7 +37,13 @@ passport.use(
  * Saves users id to req.session.passport.user = {id: '..'}
  */
 passport.serializeUser((user, done) => {
-  done(null, user);
+  const userInSession = {
+    id: user.id,
+    name: user.name,
+    displayName: user.displayName,
+    emails: user.emails,
+  };
+  done(null, userInSession);
 });
 
 /**
@@ -52,7 +58,6 @@ passport.deserializeUser((apiUser, done) => {
       const user = {
         ...dbUser,
         name: apiUser.name,
-        photos: apiUser.photos,
         displayName: apiUser.displayName,
       };
       done(null, user);
