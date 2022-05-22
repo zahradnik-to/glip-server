@@ -34,16 +34,11 @@ passport.use(
 );
 
 /**
- * Saves users id to req.session.passport.user = {id: '..'}
+ * Saves users id to req.session.passport.user = {id: '..'}. User data get passed to deserializeUser.
  */
 passport.serializeUser((user, done) => {
-  const userInSession = {
-    id: user.id,
-    name: user.name,
-    displayName: user.displayName,
-    emails: user.emails,
-  };
-  done(null, userInSession);
+  console.log(user);
+  done(null, { _id: user._id });
 });
 
 /**
