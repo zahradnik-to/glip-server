@@ -66,7 +66,7 @@ router.post(
     try {
       await EventModel(event).save();
       // If there is no more free time, create all day BC event.
-      await checkRemainingFreeTime(event.date, event.typeOfService, allEvents);
+      await checkRemainingFreeTime(event.date, event.typeOfService);
       return res.status(201).json(event);
     } catch (err) {
       console.error(err);
@@ -168,6 +168,7 @@ router.get('/get-events', isAuth, async (req, res) => {
     } else {
       // Get procedures
       procedures = await ProcedureModel.find().lean();
+      // Create a map of [procedureID, procedureName]
       const proceduresMap = new Map(procedures.map((p) => [p._id.toString(), p.name]));
       // Get events and merge with procedures
       events = await EventModel.find({
@@ -176,6 +177,7 @@ router.get('/get-events', isAuth, async (req, res) => {
         canceled: false,
         customerId: req.user._id,
       }).lean();
+      // Assign procedure name to events based on procedureId from event
       events = events.map((e) => ({ ...e, procedureName: proceduresMap.get(e.procedureId) }));
     }
   } catch (err) {
@@ -237,9 +239,9 @@ router.get('/get-event', isAuth, async (req, res) => {
   const { _id } = req.query;
   EventModel.findById(_id, '_id title start end lastname email procedureId phoneNumber notes staffNotes typeOfService customerId canceled', (err, docs) => {
     if (err) return res.sendStatus(500);
+    if (!verifyRoleOrAuthor(userRoles.STAFF, docs.typeOfService, req.user)) return res.sendStatus(403);
     // eslint-disable-next-line no-param-reassign
     if (!verifyRole(userRoles.STAFF, req.user)) delete docs.staffNotes;
-    if (!verifyRoleOrAuthor(userRoles.STAFF, docs.typeOfService, req.user)) return res.sendStatus(403);
     return res.status(200).json(docs);
   }).lean();
 });
@@ -254,6 +256,7 @@ router.get('/get-staff-event', isAuth, async (req, res) => {
     }
     return res.status(200).json(docs);
   }).lean();
+  return res.status(500);
 });
 
 router.delete('/delete-staff-event', isAuth, async (req, res) => {
@@ -404,6 +407,8 @@ function calculateFreeTime(date, events, procedureDuration, eventId = '') {
   const startTime = addHours(date, WORK_TIME_BEGIN).getTime();
   const endTime = addHours(date, WORK_TIME_END).getTime();
   const addMs = APPOINTMENT_GRANULARITY_MINUTES * 1e3 * 60;
+  // Todo Fixme Lze prekrocit maximalni pracovni dobu
+
   for (let currTime = startTime; currTime < endTime; currTime += addMs) {
     if (isPast(new Date(currTime))) continue;
 

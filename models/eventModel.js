@@ -22,7 +22,6 @@ const EventSchema = mongoose.Schema({
   },
   typeOfService: {
     type: String,
-    enum: ['cosmetics', 'hair', 'massage'],
     required: true,
   },
   canceled: {
