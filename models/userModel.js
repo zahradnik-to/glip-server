@@ -6,11 +6,11 @@ const UserSchema = new mongoose.Schema({
     type: String,
     required: true,
     trim: true,
-    unique: true,
   },
 
   googleId: {
     type: String,
+    unique: true,
   },
 
   role: {

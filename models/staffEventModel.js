@@ -14,7 +14,6 @@ const EventSchema = mongoose.Schema({
   // Custom properties
   typeOfService: {
     type: String,
-    enum: ['cosmetics', 'hair', 'massage'],
   },
   staffId: {
     type: String,

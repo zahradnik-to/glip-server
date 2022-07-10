@@ -5,7 +5,16 @@ const userRoles = {
   USER: 'user',
   STAFF: 'staff', // Constant meant to represent any role that is not user
 };
-const initialUserRoles = [userRoles.ADMIN, userRoles.USER];
+const initialUserRoles = [
+  {
+    name: 'admin',
+    displayName: 'Administrátor',
+  },
+  {
+    name: 'user',
+    displayName: 'Uživatel',
+  },
+];
 
 const RoleSchema = new mongoose.Schema({
   name: {

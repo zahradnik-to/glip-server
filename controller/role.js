@@ -9,7 +9,7 @@ const UserModel = require('../models/userModel');
 const router = express.Router();
 
 const setInitialData = function (cb) {
-  const initialData = initialUserRoles.map((role) => ({ name: role, type: 'role' }));
+  const initialData = initialUserRoles.map((role) => ({ name: role.name, displayName: role.displayName, type: 'role' }));
   RoleModel.insertMany(initialData, cb);
 };
 

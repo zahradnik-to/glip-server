@@ -55,10 +55,10 @@ router.put('/update', passport.authenticate('bearer', { session: false }), async
   console.log(req.user);
   if (!verifyRole(userRoles.ADMIN, req.user)) return res.sendStatus(403);
 
-  const { _id, roleName } = req.body;
+  const { _id, roleId } = req.body;
 
   try {
-    const role = RoleModel.findOne({ name: roleName }).lean();
+    const role = await RoleModel.findById(roleId).lean();
 
     await UserModel.findByIdAndUpdate({ _id }, { role: role.name }, { new: true }).lean();
     return res.sendStatus(200);
