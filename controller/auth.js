@@ -28,7 +28,11 @@ router.get('/logout', (req, res) => {
   return res.redirect(CLIENT_URL);
 });
 
-router.get('/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
+router.get('/google', passport.authenticate('google', {
+  scope: ['profile', 'email'],
+  accessType: 'offline',
+  prompt: 'consent',
+}));
 
 router.get('/google/callback', passport.authenticate('google', {
   successRedirect: CLIENT_URL,

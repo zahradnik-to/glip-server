@@ -4,34 +4,34 @@ const User = require('../models/userModel');
 
 const adminEmails = process.env.ADMIN_EMAILS.split(',');
 
-passport.use(
-  new GoogleStrategy(
-    {
-      clientID: process.env.GOOGLE_CLIENT_ID,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-      callbackURL: '/auth/google/callback',
-    },
-    ((accessToken, refreshToken, profile, done) => {
-      // Does user exist in db
-      User.findOne({ googleId: profile.id }, (err, user) => {
-        if (err) { return done(err, null); }
-        if (!user) {
-          const email = profile.emails[0].value;
-          const isAdmin = adminEmails.includes(email);
-          const userDocument = new User({
-            email,
-            googleId: profile.id,
-            isAdmin,
-            role: isAdmin ? 'admin' : 'user',
-          });
-          userDocument.save()
-            .then(() => done(null, profile));
-        } else done(null, profile);
-        return null;
-      });
-    }),
-  ),
+const passportStrategy = new GoogleStrategy(
+  {
+    clientID: process.env.GOOGLE_CLIENT_ID,
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    callbackURL: '/auth/google/callback',
+  },
+  ((accessToken, refreshToken, profile, done) => {
+    // Prepare user object
+    const email = profile.emails[0].value;
+    const isAdmin = adminEmails.includes(email);
+    const user = {
+      email,
+      googleId: profile.id,
+      isAdmin,
+      name: profile.name,
+      displayName: profile.displayName,
+      role: isAdmin ? 'admin' : 'user',
+    };
+
+    // Update user with new tokens, if new user -> create
+    User.findOneAndUpdate({ googleId: profile.id }, user, { upsert: true, new: true }, (err, dbUser) => {
+      if (err) { return done(err, null); }
+      return done(null, dbUser);
+    }).lean();
+  }),
 );
+
+passport.use(passportStrategy);
 
 /**
  * Saves users id to req.session.passport.user = {id: '..'}. User data get passed to deserializeUser.
@@ -44,18 +44,12 @@ passport.serializeUser((user, done) => {
 /**
  * Saves user to req.user = {user}.
  * Finds user with same google id in DB and merges them with data from Google API.
- * Name and avatar is not saved in DB because it can be changed on Googles side.
  */
-passport.deserializeUser((apiUser, done) => {
+passport.deserializeUser((user, done) => {
   // Saves user to req.user
-  User.findOne({ googleId: apiUser.id }).lean()
+  User.findById(user._id.toString()).lean()
     .then((dbUser) => {
-      const user = {
-        ...dbUser,
-        name: apiUser.name,
-        displayName: apiUser.displayName,
-      };
-      done(null, user);
+      done(null, dbUser);
     })
     .catch((err) => {
       done(err, null);

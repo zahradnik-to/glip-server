@@ -51,8 +51,7 @@ router.delete('/delete', isAuth, async (req, res) => {
 /**
  * Used to update users role.
  */
-router.put('/update', passport.authenticate('bearer', { session: false }), async (req, res) => {
-  console.log(req.user);
+router.put('/update', isAuth, async (req, res) => {
   if (!verifyRole(userRoles.ADMIN, req.user)) return res.sendStatus(403);
 
   const { _id } = req.body;

@@ -47,10 +47,11 @@ app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.use(cookieSession({
-  name: 'session',
+  name: 'glipSession',
   secret: 'foo',
   keys: ['glip'],
-  maxAge: 24 * 60 * 60 * 100, // 1 day
+  maxAge: 24 * 60 * 60 * 1000, // 24 hours
+  rolling: true,
 }));
 
 app.use(passport.initialize());
