@@ -49,13 +49,14 @@ router.delete('/delete', isAuth, async (req, res) => {
 });
 
 /**
- * Primarily used to update users role.
+ * Used to update users role.
  */
 router.put('/update', passport.authenticate('bearer', { session: false }), async (req, res) => {
   console.log(req.user);
   if (!verifyRole(userRoles.ADMIN, req.user)) return res.sendStatus(403);
 
-  const { _id, roleId } = req.body;
+  const { _id } = req.body;
+  const roleId = req.body.role;
 
   try {
     const role = await RoleModel.findById(roleId).lean();

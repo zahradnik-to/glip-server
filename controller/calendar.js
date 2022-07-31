@@ -177,7 +177,7 @@ router.get('/get-events', isAuth, async (req, res) => {
         canceled: false,
         customerId: req.user._id,
       }).lean();
-      // Assign procedure name to events based on procedureId from event
+      // Map procedure names to events based on procedureId
       events = events.map((e) => ({ ...e, procedureName: proceduresMap.get(e.procedureId) }));
     }
   } catch (err) {
@@ -187,26 +187,27 @@ router.get('/get-events', isAuth, async (req, res) => {
   return res.status(200).json(events);
 });
 
-router.get('/get-events-list', isAuth, async (req, res) => {
-  let paginateEvents;
-  let procedures;
-  const options = {
-    page: req.query.page,
+router.get('/get-events-page', isAuth, async (req, res) => {
+  let requestedPage = req.query.page;
+  if (!requestedPage) requestedPage = 1;
+  const paginateOptions = {
+    page: requestedPage,
     limit: 10,
     sort: { start: 'desc' },
     customLabels: {
       docs: 'events',
     },
   };
-  const dtoIn = {
-    customerId: req.user._id,
-  };
+
+  let procedures;
+  let paginateEvents;
   try {
     // Get procedures
     procedures = await ProcedureModel.find().lean();
     const proceduresMap = new Map(procedures.map((p) => [p._id.toString(), p.name]));
-    // Get events and merge with procedures
-    paginateEvents = await EventModel.paginate(dtoIn, options);
+    paginateEvents = await EventModel.paginate({ customerId: req.user._id }, paginateOptions);
+
+    // Map procedure names to events based on procedureId
     let events = paginateEvents.events.map((e) => e.toObject());
     events = events.map((e) => ({ ...e, procedureName: proceduresMap.get(e.procedureId) }));
     paginateEvents.events = events;
