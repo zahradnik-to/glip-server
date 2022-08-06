@@ -38,10 +38,12 @@ router.post(
     const event = req.body;
     if (isPast(new Date(event.date))) return res.status(500).json('Nelze založit událost v minulosti.');
 
-    // Find provided procedure
+    // Find provided procedure and typeOfService/role
     let procedure;
+    let role;
     try {
       procedure = await ProcedureModel.findById({ _id: event.procedureId }).lean();
+      role = await RoleModel.findOne({ name: event.typeOfService }).lean();
     } catch (err) {
       console.error(err);
       return res.status(404).json('Služba nenalazena.');
@@ -49,6 +51,7 @@ router.post(
 
     event.title = `${procedure.name}`;
     event.end = calculateEventEnd(event.start, procedure.duration).toISOString();
+    event.typeOfService = role.displayName;
     event.canceled = false;
     if (req.isAuthenticated()) event.customerId = req.user._id;
 
@@ -165,9 +168,6 @@ router.get('/get-events', isAuth, async (req, res) => {
     } else {
       events = await getEventsForLoggedUser(dtoIn, procedureList, req.user);
     }
-    // Map studio names to events
-    const roleList = await RoleModel.find({ type: 'staffRole' }).lean();
-    events = mapTypeOfServiceDisplayNameFromNameToEvents(events, roleList);
   } catch (err) {
     console.error(err);
     return res.sendStatus(500);
@@ -193,9 +193,7 @@ router.get('/get-events-page', isAuth, async (req, res) => {
     paginateEvents = await EventModel.paginate({ customerId: req.user._id }, paginateOptions);
     const eventList = paginateEvents.events.map((e) => e.toObject());
 
-    let mappedEventList = mapProcedureNameFromIdToEvents(eventList, procedureList);
-    const roleList = await RoleModel.find({ type: 'staffRole' }).lean();
-    mappedEventList = mapTypeOfServiceDisplayNameFromNameToEvents(mappedEventList, roleList);
+    const mappedEventList = mapProcedureNameFromIdToEvents(eventList, procedureList);
 
     // Replace events with mapped plain object event list
     paginateEvents.events = mappedEventList;
@@ -502,13 +500,6 @@ function mapProcedureNameFromIdToEvents(eventList, procedureList) {
   const proceduresMap = new Map(procedureList.map((p) => [p._id.toString(), p.name]));
   // Map procedure names to events based on procedureId
   return eventList.map((e) => ({ ...e, procedureName: proceduresMap.get(e.procedureId) }));
-}
-
-function mapTypeOfServiceDisplayNameFromNameToEvents(eventList, roleList) {
-  // Create a map of [procedureID, procedureName]
-  const proceduresMap = new Map(roleList.map((r) => [r.name, r.displayName]));
-  // Map procedure names to events based on procedureId
-  return eventList.map((e) => ({ ...e, typeOfServiceName: proceduresMap.get(e.typeOfService) }));
 }
 
 module.exports = router;
