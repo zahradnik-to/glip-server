@@ -9,7 +9,7 @@ const StaffEventModel = require('../models/staffEventModel');
 const ProcedureModel = require('../models/procedureModel');
 const { isAuth } = require('../middleware/isAuthenticated');
 const { verifyRole, verifyAuthor } = require('../middleware/isAuthorized');
-const { userRoles } = require('../models/roleModel');
+const { userRoles, RoleModel } = require('../models/roleModel');
 const { verifyRoleOrAuthor } = require('../middleware/isAuthorized');
 
 const WORK_TIME_BEGIN = 7;
@@ -155,31 +155,19 @@ router.post('/create-staff-event', isAuth, async (req, res) => {
 
 router.get('/get-events', isAuth, async (req, res) => {
   let events;
-  let procedures;
+  const dtoIn = req.query;
+  const requestedStudio = req.query.typeOfService;
   try {
-    // When typeOfService is defined fetch everything - administration -> Admin with user role My appointments fix
-    if (req.query.typeOfService && verifyRole(userRoles.STAFF, req.user)) {
-      events = await getAllEvents(
-        new Date(req.query.start).toISOString(),
-        new Date(req.query.end).toISOString(),
-        req.query.typeOfService,
-        req.query.showCanceled,
-      );
+    const procedureList = await ProcedureModel.find().lean();
+    if (allStudioEventsAreRequestedAndUserHasStaffRole(requestedStudio, req)) {
+      if (userNotAdminOrHasDifferentRoleThanRequested(req, requestedStudio)) res.sendStatus(403);
+      events = await getAllEventsForStudio(dtoIn, procedureList);
     } else {
-      // Get procedures
-      procedures = await ProcedureModel.find().lean();
-      // Create a map of [procedureID, procedureName]
-      const proceduresMap = new Map(procedures.map((p) => [p._id.toString(), p.name]));
-      // Get events and merge with procedures
-      events = await EventModel.find({
-        start: { $gte: new Date(req.query.start).toISOString() },
-        end: { $lte: new Date(req.query.end).toISOString() },
-        canceled: false,
-        customerId: req.user._id,
-      }).lean();
-      // Map procedure names to events based on procedureId
-      events = events.map((e) => ({ ...e, procedureName: proceduresMap.get(e.procedureId) }));
+      events = await getEventsForLoggedUser(dtoIn, procedureList, req.user);
     }
+    // Map studio names to events
+    const roleList = await RoleModel.find({ type: 'staffRole' }).lean();
+    events = mapTypeOfServiceDisplayNameFromNameToEvents(events, roleList);
   } catch (err) {
     console.error(err);
     return res.sendStatus(500);
@@ -199,18 +187,18 @@ router.get('/get-events-page', isAuth, async (req, res) => {
     },
   };
 
-  let procedures;
   let paginateEvents;
   try {
-    // Get procedures
-    procedures = await ProcedureModel.find().lean();
-    const proceduresMap = new Map(procedures.map((p) => [p._id.toString(), p.name]));
+    const procedureList = await ProcedureModel.find().lean();
     paginateEvents = await EventModel.paginate({ customerId: req.user._id }, paginateOptions);
+    const eventList = paginateEvents.events.map((e) => e.toObject());
 
-    // Map procedure names to events based on procedureId
-    let events = paginateEvents.events.map((e) => e.toObject());
-    events = events.map((e) => ({ ...e, procedureName: proceduresMap.get(e.procedureId) }));
-    paginateEvents.events = events;
+    let mappedEventList = mapProcedureNameFromIdToEvents(eventList, procedureList);
+    const roleList = await RoleModel.find({ type: 'staffRole' }).lean();
+    mappedEventList = mapTypeOfServiceDisplayNameFromNameToEvents(mappedEventList, roleList);
+
+    // Replace events with mapped plain object event list
+    paginateEvents.events = mappedEventList;
   } catch (err) {
     console.error(err);
     return res.sendStatus(500);
@@ -479,6 +467,48 @@ async function getAllEvents(start, end, typeOfService, showCanceled = false) {
   }).lean();
 
   return [...events, ...staffEvents];
+}
+
+function allStudioEventsAreRequestedAndUserHasStaffRole(requestedStudio, req) {
+  return requestedStudio && verifyRole(userRoles.STAFF, req.user);
+}
+
+function userNotAdminOrHasDifferentRoleThanRequested(req, requestedStudio) {
+  return !req.user.isAdmin && requestedStudio !== req.user.role;
+}
+
+async function getAllEventsForStudio(dtoIn, procedureList) {
+  const events = await getAllEvents(
+    new Date(dtoIn.start).toISOString(),
+    new Date(dtoIn.end).toISOString(),
+    dtoIn.typeOfService,
+    dtoIn?.showCanceled,
+  );
+  return mapProcedureNameFromIdToEvents(events, procedureList);
+}
+
+async function getEventsForLoggedUser(dtoIn, procedureList, user) {
+  const events = await EventModel.find({
+    start: { $gte: new Date(dtoIn.start).toISOString() },
+    end: { $lte: new Date(dtoIn.end).toISOString() },
+    canceled: false,
+    customerId: user._id,
+  }).lean();
+  return mapProcedureNameFromIdToEvents(events, procedureList);
+}
+
+function mapProcedureNameFromIdToEvents(eventList, procedureList) {
+  // Create a map of [procedureID, procedureName]
+  const proceduresMap = new Map(procedureList.map((p) => [p._id.toString(), p.name]));
+  // Map procedure names to events based on procedureId
+  return eventList.map((e) => ({ ...e, procedureName: proceduresMap.get(e.procedureId) }));
+}
+
+function mapTypeOfServiceDisplayNameFromNameToEvents(eventList, roleList) {
+  // Create a map of [procedureID, procedureName]
+  const proceduresMap = new Map(roleList.map((r) => [r.name, r.displayName]));
+  // Map procedure names to events based on procedureId
+  return eventList.map((e) => ({ ...e, typeOfServiceName: proceduresMap.get(e.typeOfService) }));
 }
 
 module.exports = router;
