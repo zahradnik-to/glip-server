@@ -20,7 +20,7 @@ router.post(
       await procedureModel.save();
       return res.status(201).json(procedure);
     } catch (err) {
-      return res.status(501).json(err);
+      return res.status(500).json(err);
     }
   },
 );
