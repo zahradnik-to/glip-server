@@ -22,6 +22,19 @@ const UserSchema = new mongoose.Schema({
   isAdmin: {
     type: Boolean,
   },
+
+  displayName: {
+    type: String,
+  },
+
+  name: {
+    familyName: {
+      type: String,
+    },
+    givenName: {
+      type: String,
+    },
+  },
 });
 
 const UserModel = mongoose.model('User', UserSchema);
