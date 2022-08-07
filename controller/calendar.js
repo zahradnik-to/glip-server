@@ -6,7 +6,7 @@ const {
 const { body, validationResult } = require('express-validator');
 const EventModel = require('../models/eventModel');
 const StaffEventModel = require('../models/staffEventModel');
-const ProcedureModel = require('../models/procedureModel');
+const { ProcedureModel } = require('../models/procedureModel');
 const { isAuth } = require('../middleware/isAuthenticated');
 const { verifyRole, verifyAuthor } = require('../middleware/isAuthorized');
 const { userRoles, RoleModel } = require('../models/roleModel');
