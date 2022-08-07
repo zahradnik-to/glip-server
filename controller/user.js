@@ -54,14 +54,13 @@ router.delete('/delete', isAuth, async (req, res) => {
 router.put('/update', isAuth, async (req, res) => {
   if (!verifyRole(userRoles.ADMIN, req.user)) return res.sendStatus(403);
 
-  const { _id } = req.body;
-  const roleId = req.body.role;
+  const { _id, role } = req.body;
 
   try {
-    const role = await RoleModel.findById(roleId).lean();
+    const dbRole = await RoleModel.findOne({ name: role }).lean();
 
-    await UserModel.findByIdAndUpdate({ _id }, { role: role.name }, { new: true }).lean();
-    return res.sendStatus(200);
+    await UserModel.findByIdAndUpdate({ _id }, { role: dbRole.name }, { new: true }).lean();
+    return res.status(200).json(dbRole);
   } catch (err) {
     console.error('User update failed: ', err);
     return res.status(500).send(err.toString());

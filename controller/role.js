@@ -61,7 +61,7 @@ router.delete('/delete', isAuth, async (req, res) => {
     if (!role) throw new Error('Role nebyla nalezena!');
 
     // Find and update users with role
-    const users = await UserModel.findOne({ role: role.name }).lean();
+    const users = await UserModel.find({ role: role.name }).lean();
     if (users) await updateUsersWithDeletedRole(users);
 
     // Delete role
