@@ -6,15 +6,15 @@ const {
 const { body, validationResult } = require('express-validator');
 const EventModel = require('../models/eventModel');
 const StaffEventModel = require('../models/staffEventModel');
-const { ProcedureModel } = require('../models/procedureModel');
+const { ProcedureModel, PROCEDURE_DURATION_GRANULARITY } = require('../models/procedureModel');
 const { isAuth } = require('../middleware/isAuthenticated');
 const { verifyRole, verifyAuthor } = require('../middleware/isAuthorized');
 const { userRoles, RoleModel } = require('../models/roleModel');
 const { verifyRoleOrAuthor } = require('../middleware/isAuthorized');
+const UserModel = require('../models/userModel');
 
 const WORK_TIME_BEGIN = 7;
 const WORK_TIME_END = 17;
-const APPOINTMENT_GRANULARITY_MINUTES = 15;
 
 /**
  * Takes values from client form, validates, sanitizes them and creates new event in Mongo.
@@ -68,6 +68,9 @@ router.post(
 
     try {
       await EventModel(event).save();
+
+      if (req.isAuthenticated()) await saveUsersPhoneNumber(req.user._id, event.phoneNumber);
+
       // If there is no more free time, create all day BC event.
       await checkRemainingFreeTime(event.date, event.typeOfService);
       return res.status(201).json(event);
@@ -393,7 +396,7 @@ function calculateFreeTime(date, events, procedureDuration, eventId = '') {
   const freeTime = [];
   const startTime = addHours(date, WORK_TIME_BEGIN).getTime();
   const endTime = addHours(date, WORK_TIME_END).getTime();
-  const addMs = APPOINTMENT_GRANULARITY_MINUTES * 1e3 * 60;
+  const addMs = PROCEDURE_DURATION_GRANULARITY * 1e3 * 60;
   // Todo Fixme Lze prekrocit maximalni pracovni dobu
 
   for (let currTime = startTime; currTime < endTime; currTime += addMs) {
@@ -428,7 +431,7 @@ function calculateFreeTime(date, events, procedureDuration, eventId = '') {
 function isFullyBooked(date, events) {
   const startTime = addHours(date, WORK_TIME_BEGIN).getTime();
   const endTime = addHours(date, WORK_TIME_END).getTime();
-  const addMs = APPOINTMENT_GRANULARITY_MINUTES * 1e3 * 60;
+  const addMs = PROCEDURE_DURATION_GRANULARITY * 1e3 * 60;
   for (let currTime = startTime; currTime < endTime; currTime += addMs) {
     if (isPast(new Date(currTime))) continue;
 
@@ -500,6 +503,10 @@ function mapProcedureNameFromIdToEvents(eventList, procedureList) {
   const proceduresMap = new Map(procedureList.map((p) => [p._id.toString(), p.name]));
   // Map procedure names to events based on procedureId
   return eventList.map((e) => ({ ...e, procedureName: proceduresMap.get(e.procedureId) }));
+}
+
+async function saveUsersPhoneNumber(_id, phoneNumber) {
+  await UserModel.findByIdAndUpdate({ _id }, { phoneNumber }, { new: true }).lean();
 }
 
 module.exports = router;

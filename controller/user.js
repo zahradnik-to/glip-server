@@ -1,7 +1,7 @@
 const express = require('express');
 const passport = require('passport');
 const UserModel = require('../models/userModel');
-const { verifyRole } = require('../middleware/isAuthorized');
+const { verifyRole, verifyRoleOrAuthor } = require('../middleware/isAuthorized');
 const { isAuth } = require('../middleware/isAuthenticated');
 const { userRoles, RoleModel } = require('../models/roleModel');
 
@@ -52,14 +52,13 @@ router.delete('/delete', isAuth, async (req, res) => {
  * Used to update users role.
  */
 router.put('/update', isAuth, async (req, res) => {
-  if (!verifyRole(userRoles.ADMIN, req.user)) return res.sendStatus(403);
-
-  const { _id, role } = req.body;
+  const { _id, phoneNumber, role } = req.body;
+  if (!verifyRoleOrAuthor(userRoles.ADMIN, req.user, _id)) return res.sendStatus(403);
 
   try {
     const dbRole = await RoleModel.findOne({ name: role }).lean();
 
-    await UserModel.findByIdAndUpdate({ _id }, { role: dbRole.name }, { new: true }).lean();
+    await UserModel.findByIdAndUpdate({ _id }, { role: dbRole?.name, phoneNumber }, { new: true }).lean();
     return res.status(200).json(dbRole);
   } catch (err) {
     console.error('User update failed: ', err);

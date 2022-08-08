@@ -1,8 +1,8 @@
 const mongoose = require('mongoose');
 
-const PROCEDURE_DURATION_DIVISIBILITY = 15;
+const PROCEDURE_DURATION_GRANULARITY = 15;
 
-const isDurationCorrect = (duration) => duration % PROCEDURE_DURATION_DIVISIBILITY === 0;
+const isDurationCorrect = (duration) => duration % PROCEDURE_DURATION_GRANULARITY === 0;
 
 const ProcedureSchema = mongoose.Schema({
   name: {
@@ -28,4 +28,4 @@ const ProcedureSchema = mongoose.Schema({
 });
 
 const ProcedureModel = mongoose.model('Procedure', ProcedureSchema);
-module.exports = { ProcedureModel, isDurationCorrect };
+module.exports = { ProcedureModel, isDurationCorrect, PROCEDURE_DURATION_GRANULARITY };
