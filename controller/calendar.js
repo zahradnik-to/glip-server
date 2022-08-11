@@ -57,6 +57,13 @@ router.post(
     event.canceled = false;
     if (req.isAuthenticated()) event.customerId = req.user._id;
 
+    // Set price and duration
+    const { extraPrice, extraDuration } = calculateEventPriceAndDuration(event.selectedAddProcList);
+    event.price = procedure.price;
+    event.duration = procedure.duration;
+    event.extraPrice = extraPrice;
+    event.extraDuration = extraDuration;
+
     // Make sure the selected time is still not occupied or during vacation
     const { dateStart, dateEnd } = getDateStartEnd(event.start);
     let allEvents;
@@ -110,6 +117,7 @@ router.put('/update-event', isAuth, async (req, res) => {
       update.duration = duration;
     }
 
+    if (!start) start = foundEvent.start;
     if (dateTimeChange || procedureId) {
       update.end = calculateEventEnd(start, duration).toISOString();
     }
@@ -197,6 +205,10 @@ router.get('/get-events-page', isAuth, async (req, res) => {
     const eventList = paginateEvents.events.map((e) => e.toObject());
 
     const mappedEventList = mapProcedureNameFromIdToEvents(eventList, procedureList);
+
+    // if (!verifyRole(userRoles.STAFF, req.user)) {
+    //   mappedEventList = mappedEventList.map((e) => delete e?.staffNotes);
+    // }
 
     // Replace events with mapped plain object event list
     paginateEvents.events = mappedEventList;
@@ -328,7 +340,7 @@ router.get('/get-free-time', async (req, res) => {
 
   let allEvents;
   try {
-    allEvents = await getAllEvents(dateStart, dateEnd, typeOfService);
+    allEvents = await getAllEvents(dateStart, dateEnd, procedure.typeOfService);
   } catch (err) {
     console.error(err);
     return res.sendStatus(500);
