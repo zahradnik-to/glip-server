@@ -52,11 +52,13 @@ router.delete('/delete', isAuth, async (req, res) => {
  * Used to update users role.
  */
 router.put('/update', isAuth, async (req, res) => {
-  const { _id, phoneNumber, role } = req.body;
+  const { _id, phoneNumber } = req.body;
+  let roleName = req.body.role;
   if (!verifyRoleOrAuthor(userRoles.ADMIN, req.user, _id)) return res.sendStatus(403);
+  if (!verifyRole(userRoles.ADMIN, req.user)) roleName = null;
 
   try {
-    const dbRole = await RoleModel.findOne({ name: role }).lean();
+    const dbRole = await RoleModel.findOne({ name: roleName }).lean();
 
     await UserModel.findByIdAndUpdate({ _id }, { role: dbRole?.name, phoneNumber }, { new: true }).lean();
     return res.status(200).json(dbRole);

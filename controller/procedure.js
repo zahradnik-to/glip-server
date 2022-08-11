@@ -20,6 +20,7 @@ router.post(
       await procedureModel.save();
       return res.status(201).json(procedure);
     } catch (err) {
+      console.error(err);
       return res.status(500).json(err);
     }
   },
@@ -27,9 +28,15 @@ router.post(
 
 router.get('/get', async (req, res) => {
   let procedures;
-  const { typeOfService } = req.query;
+  const { type, typeOfService } = req.query;
+  const filter = {
+    disabled: false,
+    typeOfService,
+  };
+  if (type) filter.type = type;
+
   try {
-    procedures = await ProcedureModel.find({ typeOfService, disabled: false }).lean();
+    procedures = await ProcedureModel.find(filter).lean();
     return res.status(200).json(procedures);
   } catch (err) {
     console.log(err);
@@ -57,7 +64,7 @@ router.delete('/delete', isAuth, async (req, res) => {
 
 router.put('/update', isAuth, async (req, res) => {
   const {
-    _id, price, name, duration, typeOfService,
+    _id, price, name, duration, type, typeOfService,
   } = req.body;
   if (!verifyRole(typeOfService, req.user)) return res.sendStatus(403);
   try {
@@ -65,12 +72,13 @@ router.put('/update', isAuth, async (req, res) => {
       name: (!name) ? undefined : name,
       price: (price && price >= 0) ? price : undefined,
       duration: (duration && isDurationCorrect(duration) ? duration : undefined),
+      type,
       typeOfService,
     };
     const result = await ProcedureModel.findOneAndUpdate({ _id }, update, { new: true }).lean();
     return res.status(200).json(result);
   } catch (err) {
-    console.log(err);
+    console.error(err);
     return res.status(500).send(err.toString());
   }
 });

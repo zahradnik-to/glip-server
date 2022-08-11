@@ -20,8 +20,8 @@ const passportStrategy = new GoogleStrategy(
       isAdmin,
       name: profile.name,
       displayName: profile.displayName,
-      role: isAdmin ? 'admin' : 'user',
     };
+    if (isAdmin) user.role = 'admin';
 
     // Update user with new tokens, if new user -> create
     User.findOneAndUpdate({ googleId: profile.id }, user, { upsert: true, new: true }, (err, dbUser) => {

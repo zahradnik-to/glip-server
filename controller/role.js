@@ -5,6 +5,7 @@ const {
 const { isAuth } = require('../middleware/isAuthenticated');
 const { verifyRole } = require('../middleware/isAuthorized');
 const UserModel = require('../models/userModel');
+const { ProcedureModel } = require('../models/procedureModel');
 
 const router = express.Router();
 
@@ -60,12 +61,16 @@ router.delete('/delete', isAuth, async (req, res) => {
     const role = await RoleModel.findById(_id).lean();
     if (!role) throw new Error('Role nebyla nalezena!');
 
+    // Delete role
+    const deleteRole = await RoleModel.deleteOne({ _id });
+
     // Find and update users with role
     const users = await UserModel.find({ role: role.name }).lean();
     if (users) await updateUsersWithDeletedRole(users);
 
-    // Delete role
-    const deleteRole = await RoleModel.deleteOne({ _id });
+    // Delete procedures with role
+    await ProcedureModel.deleteMany({ typeOfService: role.name });
+
     return res.status(200).json(deleteRole);
   } catch (err) {
     console.error('Role delete failed: ', err);

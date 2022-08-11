@@ -1,7 +1,7 @@
 const router = require('express').Router();
 
 const {
-  addMinutes, addDays, subHours, isPast, addHours,
+  addMinutes, addDays, subHours, subMinutes, isPast, addHours,
 } = require('date-fns');
 const { body, validationResult } = require('express-validator');
 const EventModel = require('../models/eventModel');
@@ -15,6 +15,8 @@ const UserModel = require('../models/userModel');
 
 const WORK_TIME_BEGIN = 7;
 const WORK_TIME_END = 17;
+const EVENT_MODIFICATION_CUTOFF_HRS = 24;
+const USER_EVENT_ALLOWED_FIELDS = '_id title start end lastname email procedureId phoneNumber notes typeOfService customerId canceled price duration extraPrice extraDuration';
 
 /**
  * Takes values from client form, validates, sanitizes them and creates new event in Mongo.
@@ -31,8 +33,8 @@ router.post(
   async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      console.log(errors.array());
-      return res.status(500).json({ message: 'Neplatný formulář.', errors: errors.array() });
+      console.error(errors.array());
+      return res.status(500).json({ message: 'Neplatný formulář.' });
     }
 
     const event = req.body;
@@ -59,7 +61,7 @@ router.post(
     const { dateStart, dateEnd } = getDateStartEnd(event.start);
     let allEvents;
     try {
-      allEvents = await getAllEvents(dateStart, dateEnd, event.typeOfService);
+      allEvents = await getAllEvents(dateStart, dateEnd, '', false, role);
     } catch (err) {
       return res.sendStatus(500);
     }
@@ -72,7 +74,7 @@ router.post(
       if (req.isAuthenticated()) await saveUsersPhoneNumber(req.user._id, event.phoneNumber);
 
       // If there is no more free time, create all day BC event.
-      await checkRemainingFreeTime(event.date, event.typeOfService);
+      await checkRemainingFreeTime(event.date, '', role);
       return res.status(201).json(event);
     } catch (err) {
       console.error(err);
@@ -90,6 +92,9 @@ router.put('/update-event', isAuth, async (req, res) => {
   let { start } = update;
   try {
     const foundEvent = await EventModel.findById(_id).lean();
+    const eventProcedure = await ProcedureModel.findById(foundEvent.procedureId).lean();
+    const typeOfServiceName = eventProcedure.typeOfService;
+
     // Only staff with role or author can update
     if (!verifyRoleOrAuthor(foundEvent.typeOfService, user, foundEvent.customerId)) return res.sendStatus(403);
     // User can only update notes
@@ -98,16 +103,11 @@ router.put('/update-event', isAuth, async (req, res) => {
       return res.status(200).json(result.modifiedCount);
     }
 
-    const { typeOfService } = foundEvent;
-    if (!start) start = foundEvent.start;
-
-    let duration;
+    let { duration } = eventProcedure;
     if (procedureId) {
       const newProcedure = await ProcedureModel.findById(procedureId).lean();
-      duration = newProcedure.duration;
-    } else {
-      const newProcedure = await ProcedureModel.findById(foundEvent.procedureId).lean();
-      duration = newProcedure.duration;
+      duration = newProcedure.duration + foundEvent.extraDuration;
+      update.duration = duration;
     }
 
     if (dateTimeChange || procedureId) {
@@ -117,10 +117,10 @@ router.put('/update-event', isAuth, async (req, res) => {
     const result = await EventModel.updateOne({ _id }, update, { new: true });
     if (dateTimeChange) {
       // Delete occupied event from old day if exists
-      await deleteOccupiedEvent(foundEvent.start, typeOfService);
-      await checkRemainingFreeTime(start, typeOfService);
+      await deleteOccupiedEvent(foundEvent.start, typeOfServiceName);
+      await checkRemainingFreeTime(start, typeOfServiceName);
     } else {
-      await checkRemainingFreeTime(foundEvent.start, typeOfService);
+      await checkRemainingFreeTime(foundEvent.start, typeOfServiceName);
     }
     return res.status(200).json(result.modifiedCount);
   } catch (err) {
@@ -165,12 +165,12 @@ router.get('/get-events', isAuth, async (req, res) => {
   const requestedStudio = req.query.typeOfService;
   try {
     const procedureList = await ProcedureModel.find().lean();
-    if (allStudioEventsAreRequestedAndUserHasStaffRole(requestedStudio, req)) {
-      if (userNotAdminOrHasDifferentRoleThanRequested(req, requestedStudio)) res.sendStatus(403);
-      events = await getAllEventsForStudio(dtoIn, procedureList);
+    if (allStudioEventsAreRequestedAndUserHasStudioRole(requestedStudio, req)) {
+      events = await getAllEventsForStudio(dtoIn);
     } else {
-      events = await getEventsForLoggedUser(dtoIn, procedureList, req.user);
+      events = await getEventsForLoggedUser(dtoIn, req.user);
     }
+    events = mapProcedureNameFromIdToEvents(events, procedureList);
   } catch (err) {
     console.error(err);
     return res.sendStatus(500);
@@ -227,13 +227,18 @@ router.get('/get-bg-events', async (req, res) => {
 
 router.get('/get-event', isAuth, async (req, res) => {
   const { _id } = req.query;
-  EventModel.findById(_id, '_id title start end lastname email procedureId phoneNumber notes staffNotes typeOfService customerId canceled', (err, docs) => {
-    if (err) return res.sendStatus(500);
-    if (!verifyRoleOrAuthor(userRoles.STAFF, docs.typeOfService, req.user)) return res.sendStatus(403);
+
+  try {
+    const foundEvent = await EventModel.findById(_id, `${USER_EVENT_ALLOWED_FIELDS} staffNotes`).lean();
+    const eventProcedure = await ProcedureModel.findById(foundEvent.procedureId).lean();
+    if (!verifyRoleOrAuthor(eventProcedure.typeOfService, req.user, foundEvent.customerId)) return res.sendStatus(403);
+
     // eslint-disable-next-line no-param-reassign
-    if (!verifyRole(userRoles.STAFF, req.user)) delete docs.staffNotes;
-    return res.status(200).json(docs);
-  }).lean();
+    if (!verifyRole(userRoles.STAFF, req.user)) delete foundEvent.staffNotes;
+    return res.status(200).json(foundEvent);
+  } catch (e) {
+    return res.sendStatus(500);
+  }
 });
 
 router.get('/get-staff-event', isAuth, async (req, res) => {
@@ -282,19 +287,23 @@ router.delete('/delete-event', isAuth, async (req, res) => {
 router.put('/cancel-event', isAuth, async (req, res) => {
   const { _id, canceled } = req.body;
   const { user } = req;
-  const cancelCutoff = 24;
+
   try {
     const foundEvent = await EventModel.findById(_id).lean();
-    // Users can cancel event only more than 24 hours
-    const feStartDate = new Date(foundEvent.start);
-    const prevDay = subHours(feStartDate, cancelCutoff);
-    if ((isPast(feStartDate) || isPast(prevDay)) && !verifyRole(foundEvent.typeOfService, user)) return res.sendStatus(403);
+    if (!foundEvent) return res.status(500).send('Event not found');
+    const eventProcedure = 1;
+
+    // Users can cancel event only >24 hours
+    const evtStartDate = new Date(foundEvent.start);
+    const evtModificationCutoff = subHours(evtStartDate, EVENT_MODIFICATION_CUTOFF_HRS);
+    if ((isPast(evtStartDate) || isPast(evtModificationCutoff)) && !verifyRole(eventProcedure.typeOfService, user)) return res.sendStatus(403);
+
     // Only let cancel admin, role-staff or user author
-    if (!verifyRoleOrAuthor(foundEvent.typeOfService, user, foundEvent.customerId)) return res.sendStatus(403);
-    if (!canceled && !verifyRole(foundEvent.typeOfService, user)) return res.sendStatus(403); // Only staff can un-cancel event
+    if (!verifyRoleOrAuthor(eventProcedure.typeOfService, user, foundEvent.customerId)) return res.sendStatus(403);
+    if (!canceled && !verifyRole(eventProcedure.typeOfService, user)) return res.sendStatus(403); // Only staff can un-cancel event
 
     const result = await EventModel.findByIdAndUpdate({ _id }, { canceled }, { new: true }).lean();
-    await deleteOccupiedEvent(result.start, result.typeOfService);
+    await deleteOccupiedEvent(result.start, eventProcedure.typeOfService);
     return res.status(200).json(result);
   } catch (err) {
     console.log(err);
@@ -304,11 +313,14 @@ router.put('/cancel-event', isAuth, async (req, res) => {
 
 router.get('/get-free-time', async (req, res) => {
   const { dateStart, dateEnd } = getDateStartEnd(req.query.date);
-  const { typeOfService, procedureId, eventId } = req.query;
+  const {
+    typeOfService, procedureId, eventId, duration,
+  } = req.query;
 
   let procedure;
   try {
     procedure = await ProcedureModel.findById(procedureId).lean();
+    if (!procedure) return res.sendStatus(500);
   } catch (err) {
     console.error(err);
     return res.sendStatus(500);
@@ -322,9 +334,16 @@ router.get('/get-free-time', async (req, res) => {
     return res.sendStatus(500);
   }
 
-  const freeTime = calculateFreeTime(new Date(dateStart), allEvents, procedure.duration, eventId);
+  const freeTime = calculateFreeTime(new Date(dateStart), allEvents, duration, eventId);
   return res.status(200).json(freeTime);
 });
+
+function calculateEventPriceAndDuration(additionalProcedures) {
+  const extraPrice = additionalProcedures.reduce((total, proc) => total + proc.price, 0);
+  const extraDuration = additionalProcedures.reduce((total, proc) => total + proc.duration, 0);
+
+  return { extraPrice, extraDuration };
+}
 
 /**
  * Checks remaining free time for a specific date, then creates or deletes occupied event accordingly.
@@ -332,9 +351,9 @@ router.get('/get-free-time', async (req, res) => {
  * @param typeOfService
  * @returns {Promise<void>}
  */
-async function checkRemainingFreeTime(date, typeOfService) {
+async function checkRemainingFreeTime(date, typeOfService, role = {}) {
   const { dateStart, dateEnd } = getDateStartEnd(date);
-  const events = await getAllEvents(dateStart, dateEnd, typeOfService);
+  const events = await getAllEvents(dateStart, dateEnd, typeOfService, false, role);
   const isBooked = isFullyBooked(new Date(dateStart), events);
   if (isBooked) {
     // No free time, add booked event
@@ -388,28 +407,29 @@ function calculateEventEnd(start, duration) {
  * Returns free time for an appointment based on events in DB.
  * @param date
  * @param events {Object[]} of events to look through.
- * @param procedureDuration {Number} Duration of procedure being created.
+ * @param reservationDuration {Number} Duration of procedure being created.
  * @param eventId Only used when calculating for already existing event.ws
  * @returns {String[]} Array of strings representing free times for an appointment.
  */
-function calculateFreeTime(date, events, procedureDuration, eventId = '') {
+function calculateFreeTime(date, events, reservationDuration, eventId = '') {
   const freeTime = [];
   const startTime = addHours(date, WORK_TIME_BEGIN).getTime();
-  const endTime = addHours(date, WORK_TIME_END).getTime();
+  let endTime = addHours(date, WORK_TIME_END);
+  endTime = subMinutes(endTime, reservationDuration - 1).getTime(); // Work time exceed protection
   const addMs = PROCEDURE_DURATION_GRANULARITY * 1e3 * 60;
-  // Todo Fixme Lze prekrocit maximalni pracovni dobu
 
   for (let currTime = startTime; currTime < endTime; currTime += addMs) {
     if (isPast(new Date(currTime))) continue;
 
     const procedureStart = currTime;
-    const procedureEnd = addMinutes(new Date(currTime), procedureDuration).getTime();
+    const procedureEnd = addMinutes(new Date(currTime), reservationDuration).getTime();
     const eventExists = (e) => (e._id.toString() !== eventId) && ( // Prevent event from blocking itself when editing time
       (Date.parse(e.start) >= procedureStart && Date.parse(e.start) < procedureEnd) // Found event starts in procedure interval
       || (Date.parse(e.end) > procedureStart && Date.parse(e.end) < procedureEnd)); // Found event end in procedure interval
 
     const foundEvent = events.find((eventExists));
     if (foundEvent) {
+      // Skip iteration to end of found event
       currTime = foundEvent.end.getTime() - addMs;
       continue;
     }
@@ -450,52 +470,55 @@ function isFullyBooked(date, events) {
  * Gathers regular and staff events and returns them in an array.
  * @param start
  * @param end
- * @param typeOfService
- * @param showCanceled
+ * @param typeOfService {string} DisplayName of role
+ * @param showCanceled {boolean}
+ * @param roleObj {Object}
  * @returns {Promise<*[]>}
  */
-async function getAllEvents(start, end, typeOfService, showCanceled = false) {
+async function getAllEvents(start, end, typeOfService, showCanceled = false, roleObj = {}) {
+  const tosName = await determineTosName(roleObj, typeOfService);
   const events = await EventModel.find({
     start: { $gte: start },
     end: { $lte: end },
     canceled: showCanceled,
-    typeOfService,
+    typeOfService: tosName,
   }).lean();
   const staffEvents = await StaffEventModel.find({
     start: { $gte: start },
     end: { $lte: end },
-    typeOfService,
+    typeOfService: tosName,
   }).lean();
 
   return [...events, ...staffEvents];
 }
 
-function allStudioEventsAreRequestedAndUserHasStaffRole(requestedStudio, req) {
-  return requestedStudio && verifyRole(userRoles.STAFF, req.user);
+async function determineTosName(roleObj, typeOfService) {
+  if (Object.keys(roleObj).length === 0) {
+    return (await RoleModel.findOne({ name: typeOfService }).lean()).displayName;
+  }
+  return roleObj.displayName;
 }
 
-function userNotAdminOrHasDifferentRoleThanRequested(req, requestedStudio) {
-  return !req.user.isAdmin && requestedStudio !== req.user.role;
+function allStudioEventsAreRequestedAndUserHasStudioRole(requestedStudio, req) {
+  return requestedStudio && verifyRole(requestedStudio, req.user);
 }
 
-async function getAllEventsForStudio(dtoIn, procedureList) {
-  const events = await getAllEvents(
+async function getAllEventsForStudio(dtoIn) {
+  return getAllEvents(
     new Date(dtoIn.start).toISOString(),
     new Date(dtoIn.end).toISOString(),
     dtoIn.typeOfService,
     dtoIn?.showCanceled,
   );
-  return mapProcedureNameFromIdToEvents(events, procedureList);
 }
 
-async function getEventsForLoggedUser(dtoIn, procedureList, user) {
-  const events = await EventModel.find({
+async function getEventsForLoggedUser(dtoIn, user) {
+  return EventModel.find({
     start: { $gte: new Date(dtoIn.start).toISOString() },
     end: { $lte: new Date(dtoIn.end).toISOString() },
     canceled: false,
     customerId: user._id,
-  }).lean();
-  return mapProcedureNameFromIdToEvents(events, procedureList);
+  }, USER_EVENT_ALLOWED_FIELDS).lean();
 }
 
 function mapProcedureNameFromIdToEvents(eventList, procedureList) {

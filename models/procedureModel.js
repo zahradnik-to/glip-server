@@ -21,6 +21,11 @@ const ProcedureSchema = mongoose.Schema({
     type: String,
     required: true,
   },
+  type: {
+    type: String,
+    enum: ['full', 'additional'],
+    required: true,
+  },
   disabled: {
     type: Boolean,
     default: false,
