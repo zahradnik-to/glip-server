@@ -4,6 +4,7 @@ const {
   addMinutes, addDays, subHours, subMinutes, isPast, addHours,
 } = require('date-fns');
 const { body, validationResult } = require('express-validator');
+const GlipMailer = require('./glipMailer');
 const EventModel = require('../models/eventModel');
 const StaffEventModel = require('../models/staffEventModel');
 const { ProcedureModel, PROCEDURE_DURATION_GRANULARITY } = require('../models/procedureModel');
@@ -12,6 +13,7 @@ const { verifyRole, verifyAuthor } = require('../middleware/isAuthorized');
 const { userRoles, RoleModel } = require('../models/roleModel');
 const { verifyRoleOrAuthor } = require('../middleware/isAuthorized');
 const UserModel = require('../models/userModel');
+const { glipMailHelper } = require('./helper/glipMailerHelper');
 
 const WORK_TIME_BEGIN = 7;
 const WORK_TIME_END = 17;
@@ -77,6 +79,13 @@ router.post(
 
     try {
       await EventModel(event).save();
+
+      event.procedureName = procedure.name;
+      await GlipMailer.sendEmail(
+        event.email,
+        glipMailHelper.reservation.create.subject,
+        glipMailHelper.reservation.create.message(event),
+      );
 
       if (req.isAuthenticated()) await saveUsersPhoneNumber(req.user._id, event.phoneNumber);
 
