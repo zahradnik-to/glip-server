@@ -6,6 +6,8 @@ const { isAuth } = require('../middleware/isAuthenticated');
 const { verifyRole } = require('../middleware/isAuthorized');
 const UserModel = require('../models/userModel');
 const { ProcedureModel } = require('../models/procedureModel');
+const EventModel = require('../models/eventModel');
+const StaffEventModel = require('../models/staffEventModel');
 
 const router = express.Router();
 
@@ -68,8 +70,12 @@ router.delete('/delete', isAuth, async (req, res) => {
     const users = await UserModel.find({ role: role.name }).lean();
     if (users) await updateUsersWithDeletedRole(users);
 
-    // Delete procedures with role
-    await ProcedureModel.deleteMany({ typeOfService: role.name });
+    // Disable procedures with role
+    await ProcedureModel.updateMany({ typeOfService: role.name }, { disabled: true });
+    // Cancel future studio events
+    await EventModel.updateMany({ start: { $gte: new Date() }, typeOfService: role.displayName }, { canceled: true });
+    // Delete all studio staff events
+    await StaffEventModel.deleteMany({ typeOfService: role.displayName });
 
     return res.status(200).json(deleteRole);
   } catch (err) {

@@ -1,33 +1,58 @@
 const glipMailHelper = {
-  MAILHOG_PORT: 1025,
   reservation: {
     create: {
       subject: 'Potrvrzení rezervace',
-      message: (ev) => getReservationCreateMessage(ev),
+      message: (reserv) => getReservationCreateMessage(reserv),
+    },
+    update: {
+      subject: 'Úprava rezervace',
+      message: (reserv) => getReservationUpdateMessage(reserv),
     },
     cancel: {
       subject: 'Stornování rezervace',
-      message: (ev) => getReservationCancelMessage(ev),
-    },
-    edit: {
-      subject: 'Úprava rezervace',
-      message: (ev) => getReservationEditMessage(ev),
+      message: (reserv) => getReservationCancelMessage(reserv),
     },
   },
 };
 
 function getReservationCreateMessage(event) {
+  const addProcNameList = [];
+  // eslint-disable-next-line no-restricted-syntax
+  for (const addProc of event.additionalProcedures) {
+    addProcNameList.push(addProc.name);
+  }
   return (`
     Dobrý den,\n 
     Vaše rezervace na jméno ${event.lastname} proběhla úspěšně.\n
     Termín rezervace: ${formatDateToString(event.start)} - ${formatTimeToString(event.end)}\n
     Studio: ${event.typeOfService}\n
-    Procedura: ${event.procedureName}\n
-    Dopňkové procedury: TODO\n
+    Služba: ${event.procedureName}\n
+    Dopňkové služby: ${addProcNameList.join(', ')}\n
     Váš telefon: +${event.phoneNumber}\n
-    Očekávaná cena: ${event.price}\n
+    Očekávaná cena: ${event.price}Kč\n
     \n\n
-    S pozdravem\n
+    S pozdravem 
+    Salon Glip
+    `);
+}
+
+function getReservationUpdateMessage(event) {
+  const addProcNameList = [];
+  // eslint-disable-next-line no-restricted-syntax
+  for (const addProc of event.additionalProcedures) {
+    addProcNameList.push(addProc.name);
+  }
+  return (`
+    Dobrý den,\n 
+    Vaše rezervace na jméno ${event.lastname} byla upravena. Současná podoba objednávky:\n
+    Termín rezervace: ${formatDateToString(event.start)} - ${formatTimeToString(event.end)}\n
+    Studio: ${event.typeOfService}\n
+    Služba: ${event.procedureName}\n
+    Dopňkové služby: ${addProcNameList.join(', ')}\n
+    Váš telefon: +${event.phoneNumber}\n
+    Očekávaná cena: ${event.price}Kč\n
+    \n\n
+    S pozdravem 
     Salon Glip
     `);
 }
@@ -36,28 +61,9 @@ function getReservationCancelMessage(event) {
   return (`
     Dobrý den,\n 
     Vaše rezervace na jméno ${event.lastname} byla stornována.\n
-    Termín rezervace: ${formatDateToString(event.start)} - ${formatTimeToString(event.end)}\n
+    Termín stornované rezervace: ${formatDateToString(event.start)} - ${formatTimeToString(event.end)}\n
     Studio: ${event.typeOfService}\n
     Procedura: ${event.procedureName}\n
-    Dopňkové procedury: TODO\n
-    Váš telefon: +${event.phoneNumber}\n
-    Očekávaná cena: ${event.price}\n
-    \n\n
-    S pozdravem\n
-    Salon Glip
-    `);
-}
-
-function getReservationEditMessage(event) {
-  return (`
-    Dobrý den,\n 
-    Vaše rezervace na jméno ${event.lastname} byla upravena následovně: \n
-    Termín rezervace: ${formatDateToString(event.start)} - ${formatTimeToString(event.end)}\n
-    Studio: ${event.typeOfService}\n
-    Procedura: ${event.procedureName}\n
-    Dopňkové procedury: TODO\n
-    Váš telefon: +${event.phoneNumber}\n
-    Očekávaná cena: ${event.price}\n
     \n\n
     S pozdravem\n
     Salon Glip

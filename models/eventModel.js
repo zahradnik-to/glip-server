@@ -17,6 +17,7 @@ const EventSchema = mongoose.Schema({
   extraPrice: Number,
   phoneNumber: String,
   procedureId: String,
+  additionalProceduresId: Array,
   notes: String,
   staffNotes: String,
   customerId: {

@@ -1,16 +1,17 @@
 const nodemailer = require('nodemailer');
-const { glipMailHelper } = require('./helper/glipMailerHelper');
+
+const MAILHOG_PORT = 1025;
 
 class GlipMailer {
   constructor() {
     this.glipEmail = process.env.GLIP_EMAIL;
     this.transport = nodemailer.createTransport({
-      port: glipMailHelper.MAILHOG_PORT,
+      port: MAILHOG_PORT,
     });
   }
 
-  sendEmail(to, subject, text) {
-    this.transport.sendMail({
+  async sendEmail(to, subject, text) {
+    await this.transport.sendMail({
       from: this.glipEmail,
       to,
       subject,
