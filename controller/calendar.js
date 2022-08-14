@@ -330,6 +330,7 @@ router.put('/cancel-event', isAuth, async (req, res) => {
     // Add info about add procedures for email
     const additionalProceduresList = await ProcedureModel.find({ _id: { $in: foundEvent.additionalProceduresId } }).lean();
     foundEvent.additionalProcedures = additionalProceduresList;
+    foundEvent.procedureName = eventProcedure.name;
 
     await GlipMailer.sendEmail(
       foundEvent.email,
