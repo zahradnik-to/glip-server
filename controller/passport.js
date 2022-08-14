@@ -37,7 +37,6 @@ passport.use(passportStrategy);
  * Saves users id to req.session.passport.user = {id: '..'}. User data get passed to deserializeUser.
  */
 passport.serializeUser((user, done) => {
-  console.log(user);
   done(null, { _id: user._id });
 });
 
